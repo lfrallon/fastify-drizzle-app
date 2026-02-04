@@ -1,5 +1,11 @@
 import Fastify from "fastify";
+import {
+  serializerCompiler,
+  validatorCompiler,
+} from "fastify-type-provider-zod";
 
+// types
+import type { ZodTypeProvider } from "fastify-type-provider-zod";
 // routes
 import router from "./router.ts";
 
@@ -11,8 +17,11 @@ export const createServer = async () => {
     logger: true,
   });
 
+  fastify.setValidatorCompiler(validatorCompiler);
+  fastify.setSerializerCompiler(serializerCompiler);
+
   // Register authentication endpoint
-  fastify.route({
+  fastify.withTypeProvider<ZodTypeProvider>().route({
     method: ["GET", "POST"],
     url: "/api/auth/*",
     async handler(request, reply) {
@@ -47,10 +56,6 @@ export const createServer = async () => {
         });
       }
     },
-  });
-
-  fastify.get("/ping", async (_request, reply) => {
-    reply.send({ message: "pong pong" });
   });
 
   // Middleware: Router
