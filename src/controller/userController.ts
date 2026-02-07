@@ -27,12 +27,16 @@ export default async function userController(fastify: FastifyInstance) {
         return reply.status(403).send({ error: "Unauthorized" });
       }
 
-      const userInfo = await db
-        .select()
-        .from(user)
-        .where(eq(user.id, session.user.id));
+      try {
+        const userInfo = await db
+          .select()
+          .from(user)
+          .where(eq(user.id, session.user.id));
 
-      reply.send(userInfo[0]);
+        return reply.send(userInfo[0]);
+      } catch (error) {
+        return reply.code(500).send({ error: "Internal Server Error" });
+      }
     },
   );
 
@@ -51,20 +55,21 @@ export default async function userController(fastify: FastifyInstance) {
       }
 
       const { firstName, lastName } = body;
-      console.log("🚀 ~ userController ~ lastName:", lastName);
 
-      console.log("🚀 ~ userController ~ firstName:", firstName);
+      try {
+        const updateUser = await db
+          .update(user)
+          .set({
+            name: `${firstName} ${lastName}`,
+            updatedAt: new Date().toISOString(),
+          })
+          .where(eq(user.id, session.user.id))
+          .returning();
 
-      const updateUser = await db
-        .update(user)
-        .set({
-          name: `${firstName} ${lastName}`,
-          updatedAt: new Date().toISOString(),
-        })
-        .where(eq(user.id, session.user.id))
-        .returning();
-
-      reply.send(updateUser[0]);
+        return reply.send(updateUser[0]);
+      } catch (error) {
+        return reply.code(500).send({ error: "Internal Server Error" });
+      }
     },
   );
 }
