@@ -1,31 +1,13 @@
 import {
   pgTable,
+  index,
   foreignKey,
-  serial,
   text,
   timestamp,
-  index,
   unique,
   boolean,
+  uuid,
 } from "drizzle-orm/pg-core";
-
-export const todos = pgTable(
-  "todos",
-  {
-    id: serial().primaryKey().notNull(),
-    title: text().notNull(),
-    createdAt: timestamp("created_at", { mode: "string" }).defaultNow(),
-    updatedAt: timestamp("updated_at", { mode: "string" }).defaultNow(),
-    userId: text("user_id").notNull(),
-  },
-  (table) => [
-    foreignKey({
-      columns: [table.userId],
-      foreignColumns: [user.id],
-      name: "todos_user_id_user_id_fk",
-    }).onDelete("cascade"),
-  ],
-);
 
 export const account = pgTable(
   "account",
@@ -128,5 +110,24 @@ export const session = pgTable(
       name: "session_user_id_user_id_fk",
     }).onDelete("cascade"),
     unique("session_token_unique").on(table.token),
+  ],
+);
+
+export const todos = pgTable(
+  "todos",
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    title: text().notNull(),
+    createdAt: timestamp("created_at", { mode: "string" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "string" }).defaultNow(),
+    userId: text("user_id").notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.userId],
+      foreignColumns: [user.id],
+      name: "todos_user_id_user_id_fk",
+    }).onDelete("cascade"),
+    index("created_at_and_id_index").on(table.createdAt, table.id),
   ],
 );

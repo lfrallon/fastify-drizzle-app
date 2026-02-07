@@ -1,4 +1,4 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray, or, gt, and } from "drizzle-orm";
 import { z } from "zod";
 
 // types
@@ -17,14 +17,19 @@ const addTodosBodySchema = z.object({
 });
 
 const deleteTodosBodySchema = z.object({
-  ids: z.array(z.number(), {
+  ids: z.array(z.uuid(), {
     error: "No id's provided.",
   }),
 });
 
+interface IQueryCursor {
+  id: string;
+  createdAt: string;
+}
+
 const todosQuerySchema = z.object({
-  page: z.string().optional(),
-  limit: z.string().optional(),
+  cursor: z.string().optional(),
+  pageSize: z.string().optional(),
 });
 
 export default async function todosController(fastify: FastifyInstance) {
@@ -42,37 +47,59 @@ export default async function todosController(fastify: FastifyInstance) {
         return reply.status(403).send({ error: "Unauthorized" });
       }
 
-      const page = parseInt(query.page ?? "1");
-      const limit = parseInt(query.limit ?? "10");
-      const offset = (page - 1) * limit;
+      const cursor: IQueryCursor | undefined = query.cursor
+        ? JSON.parse(query.cursor)
+        : undefined;
+
+      const pageSize = parseInt(query.pageSize ?? "10");
 
       try {
         const totalCount = await db.$count(
           todos,
           eq(todos.userId, session.user.id),
         );
-        // const query = db.select().from(todos);
-        // const getPaginatedTodos = await withPagination({
-        //   qb: query.$dynamic(),
-        //   orderByColumn: asc(todos.id),
-        //   page,
-        //   pageSize: limit,
-        // }).where(eq(todos.userId, session.user.id));
 
         const getPaginatedTodos = await db
           .select()
           .from(todos)
-          .orderBy(asc(todos.id))
-          .limit(limit)
-          .offset(offset)
-          .where(eq(todos.userId, session.user.id));
+          .where(
+            // make sure to add indices for the columns that you use for cursor
+            cursor
+              ? or(
+                  gt(todos.createdAt, cursor.createdAt),
+                  eq(todos.userId, session.user.id),
+                  and(
+                    eq(todos.createdAt, cursor.createdAt),
+                    eq(todos.userId, session.user.id),
+                    gt(todos.id, cursor.id),
+                  ),
+                )
+              : eq(todos.userId, session.user.id),
+          )
+          .limit(pageSize)
+          .orderBy(asc(todos.createdAt), asc(todos.id));
+
+        const newCursor = {
+          id: getPaginatedTodos[getPaginatedTodos.length - 1].id,
+          createdAt: getPaginatedTodos[getPaginatedTodos.length - 1].createdAt,
+        };
+
+        // const getPaginatedTodos = await db
+        //   .select()
+        //   .from(todos)
+        //   .orderBy(asc(todos.id))
+        //   .limit(limit)
+        //   .offset(offset)
+        //   .where(eq(todos.userId, session.user.id));
 
         return {
           data: getPaginatedTodos,
+          pageInfo: {
+            cursor: newCursor,
+          },
+          pageSize,
+          totalPages: Math.ceil(totalCount / pageSize),
           totalCount,
-          page,
-          limit,
-          totalPages: Math.ceil(totalCount / limit),
         };
       } catch (error) {
         return reply.code(500).send({ error: "Internal Server Error" });
