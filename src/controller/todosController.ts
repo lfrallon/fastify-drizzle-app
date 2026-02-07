@@ -67,11 +67,10 @@ export default async function todosController(fastify: FastifyInstance) {
             cursor
               ? or(
                   gt(todos.createdAt, cursor.createdAt),
-                  eq(todos.userId, session.user.id),
                   and(
                     eq(todos.createdAt, cursor.createdAt),
-                    eq(todos.userId, session.user.id),
                     gt(todos.id, cursor.id),
+                    eq(todos.userId, session.user.id),
                   ),
                 )
               : eq(todos.userId, session.user.id),
