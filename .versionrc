@@ -1,0 +1,86 @@
+{
+    "types": [
+        {
+            "type": "feat",
+            "section": "✨ Features"
+        },
+        {
+            "type": "fix",
+            "section": "🐛 Bug Fixes"
+        },
+        {
+            "type": "chore",
+            "section": "🧹 Chores",
+            "hidden": false
+        },
+        {
+            "type": "docs",
+            "section": "📝 Documentation"
+        },
+        {
+            "type": "style",
+            "section": "🎨 Styles"
+        },
+        {
+            "type": "refactor",
+            "section": "♻️ Refactoring"
+        },
+        {
+            "type": "perf",
+            "section": "⚡ Performance Improvements"
+        },
+        {
+            "type": "test",
+            "section": "🧪 Tests"
+        },
+        {
+            "type": "ci",
+            "section": "⚙️ CI/CD"
+        },
+        {
+            "type": "build",
+            "section": "📦 Build System"
+        }
+    ],
+    "commitUrlFormat": "https://github.com/lfrallon/fastify-drizzle-app/commit/{{hash}}",
+    "compareUrlFormat": "https://github.com/lfrallon/fastify-drizzle-app/{{previousTag}}...{{currentTag}}",
+    "issueUrlFormat": "https://github.com/lfrallon/fastify-drizzle-app/issues/{{id}}",
+    "releaseCommitMessageFormat": "chore(release): 🚀 v{{currentTag}}",
+    "bumpFiles": [
+        {
+            "filename": "package.json"
+        }
+    ],
+    "skip": {
+        "tag": false
+    },
+    "header": "# 📦 Changelog\n\nAll notable changes to this project will be documented in this file.\n",
+    "parserOpts": {
+        "noteKeywords": [
+            "BREAKING CHANGE",
+            "BREAKING CHANGES"
+        ]
+    },
+    "releaseRules": [
+        {
+            "type": "feat",
+            "release": "minor"
+        },
+        {
+            "type": "fix",
+            "release": "patch"
+        },
+        {
+            "type": "perf",
+            "release": "patch"
+        },
+        {
+            "type": "chore",
+            "release": "patch"
+        },
+        {
+            "breaking": true,
+            "release": "major"
+        }
+    ]
+}
