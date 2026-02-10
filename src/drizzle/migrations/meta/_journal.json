@@ -15,6 +15,13 @@
       "when": 1770464475339,
       "tag": "0001_stale_manta",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1770543900126,
+      "tag": "0002_watery_young_avengers",
+      "breakpoints": true
     }
   ]
 }

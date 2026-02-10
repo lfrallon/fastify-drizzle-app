@@ -7,6 +7,7 @@ import {
   unique,
   boolean,
   uuid,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 export const account = pgTable(
@@ -128,6 +129,7 @@ export const todos = pgTable(
       foreignColumns: [user.id],
       name: "todos_user_id_user_id_fk",
     }).onDelete("cascade"),
-    index("created_at_and_id_index").on(table.createdAt, table.id),
+    index("todos_created_at_idx").on(table.createdAt),
+    uniqueIndex("todos_id_idx").on(table.id),
   ],
 );
