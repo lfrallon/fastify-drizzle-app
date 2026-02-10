@@ -12,9 +12,7 @@ import { auth } from "../lib/auth.ts";
 import { db } from "../db/index.ts";
 import { todos } from "../drizzle/schema/schema.ts";
 
-const addTodosBodySchema = z.object({
-  title: z.string().min(5, "Title is required."),
-});
+const addTodosBodySchema = z.string({ error: "Invalid input." });
 
 const deleteTodosBodySchema = z.object({
   ids: z.array(z.uuid(), {
@@ -22,14 +20,14 @@ const deleteTodosBodySchema = z.object({
   }),
 });
 
-interface IQueryCursor {
-  id: string;
-  createdAt: string;
-}
-
 const todosQuerySchema = z.object({
-  cursor: z.string().optional(),
-  pageSize: z.string().optional(),
+  pageParams: z
+    .object({
+      id: z.string(),
+      createdAt: z.string(),
+    })
+    .optional(),
+  pageSize: z.coerce.number().default(10),
 });
 
 export default async function todosController(fastify: FastifyInstance) {
@@ -42,18 +40,18 @@ export default async function todosController(fastify: FastifyInstance) {
       },
     },
     async function ({ headers, query }, reply) {
+      console.log("🚀 ~ todosController ~ query:", query);
+
       const session = await auth.api.getSession({ headers });
       if (!session || !session.user) {
         return reply.status(403).send({ error: "Unauthorized" });
       }
 
-      const cursor: IQueryCursor | undefined = query.cursor
-        ? JSON.parse(query.cursor)
-        : undefined;
-
-      const pageSize = parseInt(query.pageSize ?? "10");
-
       try {
+        const { pageParams, pageSize } = query;
+        const cursor = pageParams;
+        const limit = pageSize + 1;
+
         const totalCount = await db.$count(
           todos,
           eq(todos.userId, session.user.id),
@@ -75,13 +73,26 @@ export default async function todosController(fastify: FastifyInstance) {
                 )
               : eq(todos.userId, session.user.id),
           )
-          .limit(pageSize)
+          .limit(limit)
           .orderBy(asc(todos.createdAt), asc(todos.id));
 
-        const newCursor = {
-          id: getPaginatedTodos[getPaginatedTodos.length - 1].id,
-          createdAt: getPaginatedTodos[getPaginatedTodos.length - 1].createdAt,
-        };
+        // Check if we got more items than the requested page size
+        const hasNextPage = getPaginatedTodos.length > pageSize;
+
+        // If yes, slice the array to return only the requested page size
+        const currentPageItems = hasNextPage
+          ? getPaginatedTodos.slice(0, pageSize)
+          : getPaginatedTodos;
+
+        // The next cursor will be the ID of the last item in the current page
+        const nextCursor =
+          currentPageItems.length > 0
+            ? {
+                id: currentPageItems[currentPageItems.length - 1].id,
+                createdAt:
+                  currentPageItems[currentPageItems.length - 1].createdAt,
+              }
+            : null;
 
         // const getPaginatedTodos = await db
         //   .select()
@@ -92,12 +103,13 @@ export default async function todosController(fastify: FastifyInstance) {
         //   .where(eq(todos.userId, session.user.id));
 
         return {
-          data: getPaginatedTodos,
+          data: currentPageItems,
           pageInfo: {
-            cursor: newCursor,
+            hasNextPage,
+            pageParams: nextCursor,
+            pageSize,
+            totalPages: Math.ceil(totalCount / pageSize),
           },
-          pageSize,
-          totalPages: Math.ceil(totalCount / pageSize),
           totalCount,
         };
       } catch (error) {
@@ -108,7 +120,7 @@ export default async function todosController(fastify: FastifyInstance) {
 
   // POST /api/v1/todos
   fastify.withTypeProvider<ZodTypeProvider>().post(
-    "/",
+    "/add",
     {
       schema: {
         body: addTodosBodySchema,
@@ -117,10 +129,11 @@ export default async function todosController(fastify: FastifyInstance) {
     async ({ body, headers }, reply) => {
       const session = await auth.api.getSession({ headers });
       if (!session || !session.user) {
-        return reply.status(403).send({ error: "Unauthorized" });
+        reply.status(401).send({ message: "Unauthorized" });
+        return;
       }
 
-      const { title } = body;
+      const { title } = JSON.parse(body) as { title: string };
 
       if (!title || title.length === 0) {
         return reply.code(400).send({ error: "No title provided!" });
@@ -141,7 +154,7 @@ export default async function todosController(fastify: FastifyInstance) {
 
   // DELETE /api/v1/todos
   fastify.withTypeProvider<ZodTypeProvider>().delete(
-    "/",
+    "/delete",
     {
       schema: {
         body: deleteTodosBodySchema,
