@@ -10,11 +10,17 @@ export default async function router(fastify: FastifyInstance) {
   fastify.register(todosController, { prefix: "/api/v1/todos" });
   fastify.register(userController, { prefix: "/api/v1/user" });
   fastify.register(indexController, { prefix: "/" });
+
   // Configure CORS policies
   fastify.register(fastifyCors, {
     origin: process.env.CLIENT_ORIGIN || "http://localhost:3000",
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Access-Control-Allow-Origin",
+    ],
     credentials: true,
     maxAge: 86400,
   });
