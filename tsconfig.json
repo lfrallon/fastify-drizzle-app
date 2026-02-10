@@ -1,6 +1,9 @@
 {
   "extends": "fastify-tsconfig",
   "compilerOptions": {
+    "types": [
+      "node"
+    ],
     "target": "esnext",
     "module": "nodenext",
     "moduleResolution": "nodenext",
