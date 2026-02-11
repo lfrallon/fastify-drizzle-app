@@ -73,7 +73,9 @@ const baseHandler = withCors(auth.handler);
 export const createServer = async () => {
   const fastify = Fastify({
     logger: true,
-    querystringParser: (str) => qs.parse(str),
+    routerOptions: {
+      querystringParser: (str) => qs.parse(str),
+    },
   });
 
   fastify.setValidatorCompiler(validatorCompiler);
