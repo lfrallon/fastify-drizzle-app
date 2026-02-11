@@ -20,15 +20,20 @@ const deleteTodosBodySchema = z.object({
   }),
 });
 
-const todosQuerySchema = z.object({
-  pageParams: z
-    .object({
-      id: z.string(),
-      createdAt: z.string(),
-    })
-    .optional(),
-  pageSize: z.coerce.number().default(10),
-});
+const todosQuerySchema = z
+  .object({
+    id: z.string().optional(),
+    createdAt: z.string().optional(),
+    pageSize: z.coerce.number().default(10),
+  })
+  .refine((data) => !(data.id && !data.createdAt), {
+    message: "'id' is required.",
+    path: ["id"],
+  })
+  .refine((data) => !(data.createdAt && !data.id), {
+    message: "'createdAt' is required.",
+    path: ["createdAt"],
+  });
 
 export default async function todosController(fastify: FastifyInstance) {
   // GET /api/v1/todos
@@ -48,8 +53,14 @@ export default async function todosController(fastify: FastifyInstance) {
       }
 
       try {
-        const { pageParams, pageSize } = query;
-        const cursor = pageParams;
+        const { createdAt, id, pageSize } = query;
+        const cursor =
+          createdAt && id
+            ? {
+                id,
+                createdAt,
+              }
+            : undefined;
         const limit = pageSize + 1;
 
         const totalCount = await db.$count(
@@ -85,7 +96,7 @@ export default async function todosController(fastify: FastifyInstance) {
           : getPaginatedTodos;
 
         // The next cursor will be the ID of the last item in the current page
-        const nextCursor =
+        const newNextCursor =
           currentPageItems.length > 0
             ? {
                 id: currentPageItems[currentPageItems.length - 1].id,
@@ -103,10 +114,10 @@ export default async function todosController(fastify: FastifyInstance) {
         //   .where(eq(todos.userId, session.user.id));
 
         return {
-          data: currentPageItems,
+          nodes: currentPageItems,
           pageInfo: {
             hasNextPage,
-            pageParams: nextCursor,
+            nextCursor: newNextCursor,
             pageSize,
             totalPages: Math.ceil(totalCount / pageSize),
           },
