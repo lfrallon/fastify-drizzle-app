@@ -1,4 +1,4 @@
-import { asc, eq, inArray, or, gt, and } from "drizzle-orm";
+import { eq, inArray, or, and, desc, lt, gt, asc } from "drizzle-orm";
 import { z } from "zod";
 
 // types
@@ -25,6 +25,7 @@ const todosQuerySchema = z
     id: z.string().optional(),
     createdAt: z.string().optional(),
     pageSize: z.coerce.number().default(10),
+    orderBy: z.enum(["asc", "desc"]).default("asc"),
   })
   .refine((data) => !(data.id && !data.createdAt), {
     message: "'id' is required.",
@@ -53,7 +54,7 @@ export default async function todosController(fastify: FastifyInstance) {
       }
 
       try {
-        const { createdAt, id, pageSize } = query;
+        const { createdAt, id, pageSize, orderBy } = query;
         const cursor =
           createdAt && id
             ? {
@@ -75,17 +76,22 @@ export default async function todosController(fastify: FastifyInstance) {
             // make sure to add indices for the columns that you use for cursor
             cursor
               ? or(
-                  gt(todos.createdAt, cursor.createdAt),
+                  orderBy === "desc"
+                    ? lt(todos.createdAt, cursor.createdAt)
+                    : gt(todos.createdAt, cursor.createdAt),
                   and(
                     eq(todos.createdAt, cursor.createdAt),
-                    gt(todos.id, cursor.id),
+                    lt(todos.id, cursor.id),
                     eq(todos.userId, session.user.id),
                   ),
                 )
               : eq(todos.userId, session.user.id),
           )
           .limit(limit)
-          .orderBy(asc(todos.createdAt), asc(todos.id));
+          .orderBy(
+            orderBy === "desc" ? desc(todos.createdAt) : asc(todos.createdAt),
+            orderBy === "desc" ? desc(todos.id) : asc(todos.id),
+          );
 
         // Check if we got more items than the requested page size
         const hasNextPage = getPaginatedTodos.length > pageSize;
@@ -118,7 +124,6 @@ export default async function todosController(fastify: FastifyInstance) {
           pageInfo: {
             hasNextPage,
             nextCursor: newNextCursor,
-            pageSize,
             totalPages: Math.ceil(totalCount / pageSize),
           },
           totalCount,
