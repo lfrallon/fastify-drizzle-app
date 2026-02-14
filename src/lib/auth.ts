@@ -25,12 +25,12 @@ export const auth = betterAuth({
     cookiePrefix: "fastify-drizzle",
     useSecureCookies: true,
   },
-  // session: {
-  //   cookieCache: {
-  //     enabled: true,
-  //     maxAge: 7 * 24 * 60 * 60,
-  //     strategy: "jwe",
-  //     refreshCache: false, // since we are using a secondary storage it should be `false`
-  //   },
-  // },
+  session: {
+    cookieCache: {
+      enabled: true,
+      maxAge: 7 * 24 * 60 * 60,
+      strategy: "jwe",
+      refreshCache: false, // since we are using a secondary storage it should be `false`
+    },
+  },
 });
