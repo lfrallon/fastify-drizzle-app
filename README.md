@@ -1,10 +1,10 @@
-# Fastify, Drizzle & TypeScript Starter
+# Fastify, Drizzle, Better Auth & TypeScript Starter
 
-A simple starter template for building APIs with Fastify, Drizzle and TypeScript using Node.js 24+.
+A simple starter template for building APIs with Fastify, Drizzle and TypeScript using Node.js 22+/24+.
 
 ## Requirements
 
-- **Node.js 24.0.0 or higher**
+- **Node.js 22.0.0 or higher**
 - npm
 
 ## Installation
@@ -40,6 +40,7 @@ npm run start
 ```bash
 npm run typecheck  # Check for TypeScript errors
 npm run format     # Format code with Prettier
+npm run db:studio  # Web interface for drizzle database
 ```
 
 ## Project Structure
@@ -67,6 +68,8 @@ src/
 - ✅ TypeScript support (no build step needed)
 - ✅ Hot reload in development
 - ✅ Type checking with `npm run typecheck`
+- ✅ Better Auth for authentication
+- ✅ Drizzle for database
 
 ## License
 
