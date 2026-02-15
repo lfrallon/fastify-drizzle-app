@@ -46,13 +46,47 @@ npm run db:studio  # Web interface for drizzle database
 ## Project Structure
 
 ```
-src/
-  ├── index.ts              # Entry point
-  ├── app.ts                # Fastify app setup
-  ├── router.ts             # Route registration
-  └── controller/           # Route handlers
-      ├── indexController.ts
-      └── userController.ts
+├── drizzle.config.ts
+├── fastify-database-erd
+├── package.json
+├── package-lock.json
+├── README.md
+├── src
+│   ├── db
+│   │   └── index.ts
+│   ├── drizzle
+│   │   ├── migrations
+│   │   │   ├── 0000_flimsy_dragon_man.sql
+│   │   │   ├── 0001_stale_manta.sql
+│   │   │   ├── 0002_watery_young_avengers.sql
+│   │   │   └── meta
+│   │   │       ├── 0000_snapshot.json
+│   │   │       ├── 0001_snapshot.json
+│   │   │       ├── 0002_snapshot.json
+│   │   │       └── _journal.json
+│   │   └── schema
+│   │       ├── index.ts
+│   │       ├── relations.ts
+│   │       └── schema.ts
+│   ├── index.ts
+│   ├── lib
+│   │   ├── auth-client.ts
+│   │   └── auth.ts
+│   ├── plugins
+│   ├── routes
+│   │   ├── api
+│   │   │   └── v1
+│   │   │       ├── todos
+│   │   │       │   └── index.ts
+│   │   │       └── users
+│   │   │           └── index.ts
+│   │   └── root.ts
+│   ├── server.ts
+│   └── utils
+│       └── pagination.ts
+├── static
+│   └── index.html
+└── tsconfig.json
 ```
 
 ## Getting Started
