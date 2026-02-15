@@ -6,18 +6,18 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 
 // auth lib
-import { auth } from "../lib/auth.ts";
+import auth from "#/lib/auth.ts";
 
 // db
-import { db } from "../db/index.ts";
-import { user } from "../drizzle/schema/index.ts";
+import { db } from "#/db/index.ts";
+import { user } from "#/drizzle/schema/index.ts";
 
 const putBodySchema = z.object({
   firstName: z.string().min(2, "First name is required."),
   lastName: z.string().min(2, "Last name is required."),
 });
 
-export default async function userController(fastify: FastifyInstance) {
+export default async function (fastify: FastifyInstance) {
   // GET /api/v1/user
   fastify.get(
     "/",

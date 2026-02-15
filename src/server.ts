@@ -1,17 +1,23 @@
-import qs from "qs";
+import { dirname, join } from "node:path";
 import Fastify from "fastify";
+import fastifyCors from "@fastify/cors";
+import fastifyAutoload from "@fastify/autoload";
 import {
   serializerCompiler,
   validatorCompiler,
 } from "fastify-type-provider-zod";
+import qs from "qs";
+
+// libs
+import auth from "#/lib/auth.ts";
 
 // types
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-// routes
-import router from "./router.ts";
+import { fileURLToPath } from "node:url";
 
-// libs
-import { auth } from "./lib/auth.ts";
+// Helper to get __dirname in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const allowedOrigins = new Set([
   "http://localhost:3000", // Development environment
@@ -128,8 +134,31 @@ export const createServer = async () => {
     },
   });
 
-  // Middleware: Router
-  fastify.register(router);
+  // Configure CORS policies
+  fastify.register(fastifyCors, {
+    origin: process.env.CLIENT_ORIGIN || "http://localhost:3000",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Access-Control-Allow-Origin",
+    ],
+    credentials: true,
+    maxAge: 86400,
+  });
+
+  // Routes
+  fastify.register(fastifyAutoload, {
+    dir: join(__dirname, "routes"),
+    prefix: "/",
+    routeParams: true,
+  });
+
+  // Plugins
+  fastify.register(fastifyAutoload, {
+    dir: join(__dirname, "plugins"),
+  });
 
   return fastify;
 };

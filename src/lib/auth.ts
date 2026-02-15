@@ -5,7 +5,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "../db/index.ts";
 import * as schema from "../drizzle/schema/index.ts";
 
-export const auth = betterAuth({
+const auth = betterAuth({
   appName: "Fastify Drizzle",
   database: drizzleAdapter(db, {
     provider: "pg", // or "pg" or "mysql"
@@ -34,3 +34,8 @@ export const auth = betterAuth({
     },
   },
 });
+
+export type User = typeof auth.$Infer.Session.user;
+export type Session = typeof auth.$Infer.Session;
+
+export default auth;

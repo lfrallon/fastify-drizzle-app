@@ -7,7 +7,7 @@ const { readFile } = promises;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-export default async function indexController(fastify: FastifyInstance) {
+export default async function (fastify: FastifyInstance) {
   // GET /
   fastify.get(
     "/",

@@ -6,11 +6,11 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 
 // auth lib
-import { auth } from "../lib/auth.ts";
+import auth from "#/lib/auth.ts";
 
 // db
-import { db } from "../db/index.ts";
-import { todos } from "../drizzle/schema/schema.ts";
+import { db } from "#/db/index.ts";
+import { todos } from "#/drizzle/schema/schema.ts";
 
 const addTodosBodySchema = z.string({ error: "Invalid input." });
 
@@ -36,7 +36,7 @@ const todosQuerySchema = z
     path: ["createdAt"],
   });
 
-export default async function todosController(fastify: FastifyInstance) {
+export default async function (fastify: FastifyInstance) {
   // GET /api/v1/todos
   fastify.withTypeProvider<ZodTypeProvider>().get(
     "/",
@@ -46,7 +46,7 @@ export default async function todosController(fastify: FastifyInstance) {
       },
     },
     async function ({ headers, query }, reply) {
-      console.log("🚀 ~ todosController ~ query:", query);
+      console.log("🚀 ~ todosController with autoload ~ query:", query);
 
       const session = await auth.api.getSession({ headers });
       if (!session || !session.user) {
@@ -119,7 +119,7 @@ export default async function todosController(fastify: FastifyInstance) {
         //   .offset(offset)
         //   .where(eq(todos.userId, session.user.id));
 
-        return {
+        return reply.code(200).send({
           nodes: currentPageItems,
           pageInfo: {
             hasNextPage,
@@ -127,7 +127,7 @@ export default async function todosController(fastify: FastifyInstance) {
             totalPages: Math.ceil(totalCount / pageSize),
           },
           totalCount,
-        };
+        });
       } catch (error) {
         return reply.code(500).send({ error: "Internal Server Error" });
       }

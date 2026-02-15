@@ -4,7 +4,8 @@
   "description": "Fastify TypeScript & drizzle repository",
   "type": "module",
   "scripts": {
-    "dev": "cross-env NODE_ENV=development node --watch src/index.ts",
+    "dev": "cross-env NODE_ENV=development tsx watch src/index.ts",
+    "dev:node": "cross-env NODE_ENV=development node --watch src/index.ts",
     "format": "prettier --write \"src/**/*.ts\"",
     "start": "node src/index.ts",
     "auth:generate": "npx @better-auth/cli@latest generate",
@@ -41,5 +42,8 @@
     "standard-version": "^9.5.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
+  },
+  "imports": {
+    "#/*": "./src/*.ts"
   }
 }
