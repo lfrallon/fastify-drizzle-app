@@ -12,7 +12,9 @@ import auth from "#/lib/auth.ts";
 import { db } from "#/db/index.ts";
 import { todos } from "#/drizzle/schema/schema.ts";
 
-const addTodosBodySchema = z.string({ error: "Invalid input." });
+const addTodosBodySchema = z.object({
+  title: z.string({ error: "Invalid input." }),
+});
 
 const deleteTodosBodySchema = z.object({
   ids: z.array(z.uuid(), {
@@ -46,8 +48,6 @@ export default async function (fastify: FastifyInstance) {
       },
     },
     async function ({ headers, query }, reply) {
-      console.log("🚀 ~ todosController with autoload ~ query:", query);
-
       const session = await auth.api.getSession({ headers });
       if (!session || !session.user) {
         return reply.status(403).send({ error: "Unauthorized" });
@@ -149,7 +149,7 @@ export default async function (fastify: FastifyInstance) {
         return;
       }
 
-      const { title } = JSON.parse(body) as { title: string };
+      const { title } = body;
 
       if (!title || title.length === 0) {
         return reply.code(400).send({ error: "No title provided!" });
