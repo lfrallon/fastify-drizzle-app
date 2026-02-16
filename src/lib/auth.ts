@@ -2,8 +2,8 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 
 // db
-import { db } from "../db/index.ts";
-import * as schema from "../drizzle/schema/index.ts";
+import { db } from "#/db/index.ts";
+import * as schema from "#/drizzle/schema/index.ts";
 
 const auth = betterAuth({
   appName: "Fastify Drizzle",

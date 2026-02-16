@@ -1,7 +1,10 @@
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
 import fastifyCors from "@fastify/cors";
 import fastifyAutoload from "@fastify/autoload";
+import fastifySwagger from "@fastify/swagger";
+import fastifySwaggerUi from "@fastify/swagger-ui";
 import {
   serializerCompiler,
   validatorCompiler,
@@ -13,7 +16,6 @@ import auth from "#/lib/auth.ts";
 
 // types
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { fileURLToPath } from "node:url";
 
 // Helper to get __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -146,6 +148,60 @@ export const createServer = async () => {
     ],
     credentials: true,
     maxAge: 86400,
+  });
+
+  // IMPORTANT: Register Swagger first before @fastify/autoload
+  // Swagger
+  fastify.register(fastifySwagger, {
+    openapi: {
+      info: {
+        title: "Fastify, Drizzle & Better Auth in Docs",
+        description: "Testing the Fastify API's",
+        version: "0.0.2",
+      },
+      servers: [
+        {
+          url: "http://localhost:3006",
+          description: "Development server",
+        },
+      ],
+      components: {
+        securitySchemes: {
+          apiKey: {
+            type: "apiKey",
+            name: "apiKey",
+            in: "header",
+          },
+        },
+      },
+      externalDocs: {
+        url: "https://swagger.io",
+        description: "Find more info here",
+      },
+    },
+  });
+
+  // Swagger UI
+  fastify.register(fastifySwaggerUi, {
+    routePrefix: "/",
+    uiConfig: {
+      docExpansion: "full",
+      deepLinking: false,
+    },
+    uiHooks: {
+      onRequest: function (_request, _reply, next) {
+        next();
+      },
+      preHandler: function (_request, _reply, next) {
+        next();
+      },
+    },
+    // staticCSP: true,
+    transformStaticCSP: (header) => header,
+    transformSpecification: (swaggerObject, _request, _reply) => {
+      return swaggerObject;
+    },
+    transformSpecificationClone: true,
   });
 
   // Routes
