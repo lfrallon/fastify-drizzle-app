@@ -84,7 +84,7 @@ export const createServer = async () => {
     routerOptions: {
       querystringParser: (str) => qs.parse(str),
     },
-  });
+  }).withTypeProvider<ZodTypeProvider>();
 
   fastify.setValidatorCompiler(validatorCompiler);
   fastify.setSerializerCompiler(serializerCompiler);
@@ -95,7 +95,7 @@ export const createServer = async () => {
    * Better Auth CORS issues found in: https://github.com/better-auth/better-auth/issues/4052
    *
    **/
-  fastify.withTypeProvider<ZodTypeProvider>().route({
+  fastify.route({
     method: ["GET", "POST"],
     url: "/api/auth/*",
     async handler(request, reply) {
@@ -183,6 +183,9 @@ export const createServer = async () => {
 
   // Swagger UI
   fastify.register(fastifySwaggerUi, {
+    theme: {
+      title: "API Docs",
+    },
     routePrefix: "/",
     uiConfig: {
       docExpansion: "full",

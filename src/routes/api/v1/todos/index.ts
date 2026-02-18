@@ -41,7 +41,7 @@ const todosQuerySchema = z
 export default async function (fastify: FastifyInstance) {
   // GET /api/v1/todos
   fastify.withTypeProvider<ZodTypeProvider>().get(
-    "/",
+    "",
     {
       schema: {
         querystring: todosQuerySchema,
@@ -54,7 +54,7 @@ export default async function (fastify: FastifyInstance) {
       }
 
       try {
-        const { createdAt, id, pageSize, orderBy } = query;
+        const { createdAt, id, pageSize = 6, orderBy } = query;
         const cursor =
           createdAt && id
             ? {
@@ -170,7 +170,7 @@ export default async function (fastify: FastifyInstance) {
 
   // DELETE /api/v1/todos
   fastify.withTypeProvider<ZodTypeProvider>().delete(
-    "/delete",
+    "",
     {
       schema: {
         body: deleteTodosBodySchema,

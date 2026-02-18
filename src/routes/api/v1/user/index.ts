@@ -20,7 +20,7 @@ const putBodySchema = z.object({
 export default async function (fastify: FastifyInstance) {
   // GET /api/v1/user
   fastify.get(
-    "/",
+    "",
     async function (request: FastifyRequest, reply: FastifyReply) {
       const session = await auth.api.getSession({ headers: request.headers });
       if (!session || !session.user) {
@@ -42,7 +42,7 @@ export default async function (fastify: FastifyInstance) {
 
   // PUT /api/v1/user
   fastify.withTypeProvider<ZodTypeProvider>().put(
-    "/",
+    "",
     {
       schema: {
         body: putBodySchema,
