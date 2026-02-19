@@ -2,8 +2,11 @@ import { eq, inArray, or, and, desc, lt, gt, asc } from "drizzle-orm";
 import { z } from "zod";
 
 // types
-import type { FastifyInstance } from "fastify";
-import type { ZodTypeProvider } from "fastify-type-provider-zod";
+import type {
+  FastifyZodOpenApiSchema,
+  FastifyZodOpenApiTypeProvider,
+} from "fastify-zod-openapi";
+import type { TypedFastifyInstance } from "#/types/index.ts";
 
 // auth lib
 import auth from "#/lib/auth.ts";
@@ -13,21 +16,40 @@ import { db } from "#/db/index.ts";
 import { todos } from "#/drizzle/schema/schema.ts";
 
 const addTodosBodySchema = z.object({
-  title: z.string({ error: "Invalid input." }),
-});
+  title: z
+    .string({ error: "Invalid input." })
+    .meta({ description: "Todo title", example: "Water the plants." }),
+}) satisfies FastifyZodOpenApiSchema;
 
 const deleteTodosBodySchema = z.object({
-  ids: z.array(z.uuid(), {
-    error: "No id's provided.",
-  }),
-});
+  ids: z
+    .array(z.uuid(), {
+      error: "No id's provided.",
+    })
+    .meta({
+      description: "Todo's id's",
+      example: ["123e4567-e89b-12d3-a456-426614174000"],
+    }),
+}) satisfies FastifyZodOpenApiSchema;
 
 const todosQuerySchema = z
   .object({
-    id: z.string().optional(),
-    createdAt: z.string().optional(),
-    pageSize: z.coerce.number().default(10),
-    orderBy: z.enum(["asc", "desc"]).default("asc"),
+    id: z.string().optional().meta({
+      description: "The id of the last item from the previous page",
+      example: "",
+    }),
+    createdAt: z.string().optional().meta({
+      description: "The creation date of the last item from the previous page",
+      example: "",
+    }),
+    pageSize: z.coerce.number().default(10).meta({
+      description: "Number of items to return per page",
+      example: 10,
+    }),
+    orderBy: z.enum(["asc", "desc"]).default("desc").meta({
+      description: "Order of the items",
+      example: "desc",
+    }),
   })
   .refine((data) => !(data.id && !data.createdAt), {
     message: "'id' is required.",
@@ -36,11 +58,11 @@ const todosQuerySchema = z
   .refine((data) => !(data.createdAt && !data.id), {
     message: "'createdAt' is required.",
     path: ["createdAt"],
-  });
+  }) satisfies FastifyZodOpenApiSchema;
 
-export default async function (fastify: FastifyInstance) {
+export default async function (fastify: TypedFastifyInstance) {
   // GET /api/v1/todos
-  fastify.withTypeProvider<ZodTypeProvider>().get(
+  fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().get(
     "",
     {
       schema: {
@@ -74,18 +96,20 @@ export default async function (fastify: FastifyInstance) {
           .from(todos)
           .where(
             // make sure to add indices for the columns that you use for cursor
-            cursor
-              ? or(
-                  orderBy === "desc"
-                    ? lt(todos.createdAt, cursor.createdAt)
-                    : gt(todos.createdAt, cursor.createdAt),
-                  and(
-                    eq(todos.createdAt, cursor.createdAt),
-                    lt(todos.id, cursor.id),
-                    eq(todos.userId, session.user.id),
-                  ),
-                )
-              : eq(todos.userId, session.user.id),
+            and(
+              eq(todos.userId, session.user.id),
+              cursor
+                ? or(
+                    orderBy === "desc"
+                      ? lt(todos.createdAt, cursor.createdAt)
+                      : gt(todos.createdAt, cursor.createdAt),
+                    and(
+                      eq(todos.createdAt, cursor.createdAt),
+                      lt(todos.id, cursor.id),
+                    ),
+                  )
+                : undefined,
+            ),
           )
           .limit(limit)
           .orderBy(
@@ -135,7 +159,7 @@ export default async function (fastify: FastifyInstance) {
   );
 
   // POST /api/v1/todos
-  fastify.withTypeProvider<ZodTypeProvider>().post(
+  fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().post(
     "/add",
     {
       schema: {
@@ -169,7 +193,7 @@ export default async function (fastify: FastifyInstance) {
   );
 
   // DELETE /api/v1/todos
-  fastify.withTypeProvider<ZodTypeProvider>().delete(
+  fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().delete(
     "",
     {
       schema: {
