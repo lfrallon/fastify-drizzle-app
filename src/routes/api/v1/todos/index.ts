@@ -91,6 +91,18 @@ export default async function (fastify: TypedFastifyInstance) {
           eq(todos.userId, session.user.id),
         );
 
+        if (totalCount === 0) {
+          return reply.code(200).send({
+            nodes: [],
+            pageInfo: {
+              hasNextPage: false,
+              nextCursor: null,
+              totalPages: 0,
+            },
+            totalCount,
+          });
+        }
+
         const getPaginatedTodos = await db
           .select()
           .from(todos)
@@ -215,17 +227,19 @@ export default async function (fastify: TypedFastifyInstance) {
       try {
         const deletedTodos = await db
           .delete(todos)
-          .where(inArray(todos.id, ids))
+          .where(and(eq(todos.userId, session.user.id), inArray(todos.id, ids)))
           .returning();
+
+        if (deletedTodos.length === 0) {
+          return reply.code(404).send({ error: "Request not completed." });
+        }
 
         return reply.send({
           message: `${deletedTodos.length} item/s deleted successfully`,
-          deletedItems: deletedTodos.map((item) => {
-            return {
-              id: item.id,
-              title: item.title,
-            };
-          }),
+          deletedItems: deletedTodos.map((item) => ({
+            id: item.id,
+            title: item.title,
+          })),
         });
       } catch (error) {
         return reply.code(500).send({ error: "Internal Server Error" });

@@ -126,7 +126,7 @@ export const createServer = async () => {
         securitySchemes: {
           apiKey: {
             type: "apiKey",
-            name: "apiKey",
+            name: "Authorization",
             in: "header",
           },
         },
