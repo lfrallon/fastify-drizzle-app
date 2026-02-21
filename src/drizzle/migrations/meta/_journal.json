@@ -22,6 +22,13 @@
       "when": 1770543900126,
       "tag": "0002_watery_young_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1771657093228,
+      "tag": "0003_curly_blade",
+      "breakpoints": true
     }
   ]
 }
