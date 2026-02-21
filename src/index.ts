@@ -19,6 +19,7 @@ const main = async () => {
     console.log(`Route todos:   /api/v1/todos`);
     console.log(`Route add:     /api/v1/todos/add`);
     console.log(`Route delete:  /api/v1/todos/delete`);
+    console.log(`Route update:  /api/v1/todos/update`);
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "An unknown error occurred";

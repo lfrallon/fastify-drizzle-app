@@ -21,17 +21,6 @@ const addTodosBodySchema = z.object({
     .meta({ description: "Todo title", example: "Water the plants." }),
 }) satisfies FastifyZodOpenApiSchema;
 
-const deleteTodosBodySchema = z.object({
-  ids: z
-    .array(z.uuid(), {
-      error: "No id's provided.",
-    })
-    .meta({
-      description: "Todo's id's",
-      example: ["123e4567-e89b-12d3-a456-426614174000"],
-    }),
-}) satisfies FastifyZodOpenApiSchema;
-
 const todosQuerySchema = z
   .object({
     id: z.string().optional().meta({
@@ -209,7 +198,16 @@ export default async function (fastify: TypedFastifyInstance) {
     "",
     {
       schema: {
-        body: deleteTodosBodySchema,
+        body: z.object({
+          ids: z
+            .array(z.uuid(), {
+              error: "No id's provided.",
+            })
+            .meta({
+              description: "Todo's id's",
+              example: ["123e4567-e89b-12d3-a456-426614174000"],
+            }),
+        }),
       },
     },
     async ({ body, headers }, reply) => {
@@ -239,6 +237,97 @@ export default async function (fastify: TypedFastifyInstance) {
           deletedItems: deletedTodos.map((item) => ({
             id: item.id,
             title: item.title,
+          })),
+        });
+      } catch (error) {
+        return reply.code(500).send({ error: "Internal Server Error" });
+      }
+    },
+  );
+
+  // PUT /api/v1/todos
+  fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().put(
+    "/update",
+    {
+      schema: {
+        body: z.array(
+          z
+            .object({
+              id: z.uuid().meta({
+                description: "The id of the todo item",
+                example: "123e4567-e89b-12d3-a456-426614174000",
+              }),
+              title: z.string().optional().meta({
+                description: "The new title of the todo item",
+                example: "Water the plants.",
+              }),
+              completed: z.boolean().optional().meta({
+                description: "The new completion status of the todo item",
+                example: true,
+              }),
+            })
+            .refine(
+              (data) =>
+                data.title !== undefined || data.completed !== undefined,
+              {
+                message:
+                  "At least one of 'title' or 'completed' must be provided.",
+              },
+            ),
+        ),
+      },
+    },
+    async ({ body, headers }, reply) => {
+      const session = await auth.api.getSession({ headers });
+      if (!session || !session.user) {
+        return reply.status(403).send({ error: "Unauthorized" });
+      }
+
+      try {
+        const updatedTodos = [];
+
+        for (const item of body) {
+          const { id, title, completed } = item;
+
+          const existingTodo = await db
+            .select()
+            .from(todos)
+            .where(and(eq(todos.id, id), eq(todos.userId, session.user.id)))
+            .limit(1)
+            .then((rows) => rows[0] || undefined);
+
+          if (!existingTodo) {
+            continue; // Skip if the todo item doesn't exist or doesn't belong to the user
+          }
+
+          const updatedTodo = await db
+            .update(todos)
+            .set({
+              title: title !== undefined ? title : existingTodo.title,
+              completed:
+                completed !== undefined ? completed : existingTodo.completed,
+              updatedAt: new Date().toISOString(),
+            })
+            .where(eq(todos.id, id))
+            .returning();
+
+          if (updatedTodo.length > 0) {
+            updatedTodos.push(updatedTodo[0]);
+          }
+        }
+
+        if (updatedTodos.length === 0) {
+          return reply
+            .code(404)
+            .send({ error: "No items were updated. Please check the provided ids." });
+        }
+
+        return reply.send({
+          message: `${updatedTodos.length} item/s updated successfully`,
+          updatedItems: updatedTodos.map((item) => ({
+            id: item.id,
+            title: item.title,
+            completed: item.completed,
           })),
         });
       } catch (error) {
