@@ -119,6 +119,7 @@ export const todos = pgTable(
   {
     id: uuid().defaultRandom().primaryKey().notNull(),
     title: text().notNull(),
+    completed: boolean().default(false).notNull(),
     createdAt: timestamp("created_at", { mode: "string" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "string" }).defaultNow(),
     userId: text("user_id").notNull(),
