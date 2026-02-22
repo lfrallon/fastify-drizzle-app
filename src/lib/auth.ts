@@ -30,7 +30,7 @@ const auth = betterAuth({
       enabled: true,
       maxAge: 7 * 24 * 60 * 60,
       strategy: "jwe",
-      refreshCache: false, // since we are using a secondary storage it should be `false`
+      refreshCache: false, // since we are using a database it should be `false`
     },
   },
 });

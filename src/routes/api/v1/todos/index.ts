@@ -2,10 +2,7 @@ import { eq, inArray, or, and, desc, lt, gt, asc } from "drizzle-orm";
 import { z } from "zod";
 
 // types
-import type {
-  FastifyZodOpenApiSchema,
-  FastifyZodOpenApiTypeProvider,
-} from "fastify-zod-openapi";
+import type { FastifyZodOpenApiTypeProvider } from "fastify-zod-openapi";
 import type { TypedFastifyInstance } from "#/types/index.ts";
 
 // auth lib
@@ -15,47 +12,40 @@ import auth from "#/lib/auth.ts";
 import { db } from "#/db/index.ts";
 import { todos } from "#/drizzle/schema/schema.ts";
 
-const addTodosBodySchema = z.object({
-  title: z
-    .string({ error: "Invalid input." })
-    .meta({ description: "Todo title", example: "Water the plants." }),
-}) satisfies FastifyZodOpenApiSchema;
-
-const todosQuerySchema = z
-  .object({
-    id: z.string().optional().meta({
-      description: "The id of the last item from the previous page",
-      example: "",
-    }),
-    createdAt: z.string().optional().meta({
-      description: "The creation date of the last item from the previous page",
-      example: "",
-    }),
-    pageSize: z.coerce.number().default(10).meta({
-      description: "Number of items to return per page",
-      example: 10,
-    }),
-    orderBy: z.enum(["asc", "desc"]).default("desc").meta({
-      description: "Order of the items",
-      example: "desc",
-    }),
-  })
-  .refine((data) => !(data.id && !data.createdAt), {
-    message: "'id' is required.",
-    path: ["id"],
-  })
-  .refine((data) => !(data.createdAt && !data.id), {
-    message: "'createdAt' is required.",
-    path: ["createdAt"],
-  }) satisfies FastifyZodOpenApiSchema;
-
 export default async function (fastify: TypedFastifyInstance) {
   // GET /api/v1/todos
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().get(
     "",
     {
       schema: {
-        querystring: todosQuerySchema,
+        querystring: z
+          .object({
+            id: z.string().optional().meta({
+              description: "The id of the last item from the previous page",
+              example: "",
+            }),
+            createdAt: z.string().optional().meta({
+              description:
+                "The creation date of the last item from the previous page",
+              example: "",
+            }),
+            pageSize: z.coerce.number().default(10).meta({
+              description: "Number of items to return per page",
+              example: 10,
+            }),
+            orderBy: z.enum(["asc", "desc"]).default("desc").meta({
+              description: "Order of the items",
+              example: "desc",
+            }),
+          })
+          .refine((data) => !(data.id && !data.createdAt), {
+            message: "'id' is required.",
+            path: ["id"],
+          })
+          .refine((data) => !(data.createdAt && !data.id), {
+            message: "'createdAt' is required.",
+            path: ["createdAt"],
+          }),
       },
     },
     async function ({ headers, query }, reply) {
@@ -164,7 +154,11 @@ export default async function (fastify: TypedFastifyInstance) {
     "/add",
     {
       schema: {
-        body: addTodosBodySchema,
+        body: z.object({
+          title: z
+            .string({ error: "Invalid input." })
+            .meta({ description: "Todo title", example: "Water the plants." }),
+        }),
       },
     },
     async ({ body, headers }, reply) => {
@@ -317,9 +311,9 @@ export default async function (fastify: TypedFastifyInstance) {
         }
 
         if (updatedTodos.length === 0) {
-          return reply
-            .code(404)
-            .send({ error: "No items were updated. Please check the provided ids." });
+          return reply.code(404).send({
+            error: "No items were updated. Please check the provided ids.",
+          });
         }
 
         return reply.send({
