@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   index,
@@ -121,7 +122,10 @@ export const todos = pgTable(
     title: text().notNull(),
     completed: boolean().default(false).notNull(),
     createdAt: timestamp("created_at", { mode: "string" }).defaultNow(),
-    updatedAt: timestamp("updated_at", { mode: "string" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "string" })
+      .defaultNow()
+      .$onUpdate(() => sql`CURRENT_TIMESTAMP`)
+      .notNull(),
     userId: text("user_id").notNull(),
   },
   (table) => [

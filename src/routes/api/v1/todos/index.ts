@@ -300,7 +300,6 @@ export default async function (fastify: TypedFastifyInstance) {
               title: title !== undefined ? title : existingTodo.title,
               completed:
                 completed !== undefined ? completed : existingTodo.completed,
-              updatedAt: new Date().toLocaleString(),
             })
             .where(eq(todos.id, id))
             .returning();

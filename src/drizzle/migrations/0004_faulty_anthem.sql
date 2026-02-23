@@ -1,0 +1,1 @@
+ALTER TABLE "todos" ALTER COLUMN "updated_at" SET NOT NULL;

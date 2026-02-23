@@ -29,6 +29,13 @@
       "when": 1771657093228,
       "tag": "0003_curly_blade",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1771851883870,
+      "tag": "0004_faulty_anthem",
+      "breakpoints": true
     }
   ]
 }
