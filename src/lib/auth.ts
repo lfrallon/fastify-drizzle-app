@@ -11,6 +11,11 @@ const auth = betterAuth({
     provider: "pg", // or "pg" or "mysql"
     schema,
   }),
+  user: {
+    changeEmail: {
+      enabled: true,
+    },
+  },
   emailAndPassword: {
     enabled: true,
   },
