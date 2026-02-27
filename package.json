@@ -4,10 +4,11 @@
   "description": "Fastify TypeScript & drizzle repository",
   "type": "module",
   "scripts": {
+    "build": "tsup",
+    "start": "node dist/index.js",
     "dev": "cross-env NODE_ENV=development tsx watch src/index.ts",
     "dev:node": "cross-env NODE_ENV=development node --watch src/index.ts",
     "format": "prettier --write \"src/**/*.ts\"",
-    "start": "node src/index.ts",
     "auth:generate": "npx @better-auth/cli@latest generate",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
@@ -31,6 +32,7 @@
     "fastify-zod-openapi": "^5.5.0",
     "pg": "^8.17.2",
     "qs": "^6.14.1",
+    "tsup": "^8.5.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -46,6 +48,6 @@
     "typescript": "^5.9.3"
   },
   "imports": {
-    "#/*": "./src/*.ts"
+    "#/*": "./dist/*"
   }
 }

@@ -1,5 +1,5 @@
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import Fastify from "fastify";
 import fastifyCors from "@fastify/cors";
 import fastifyAutoload from "@fastify/autoload";
@@ -173,9 +173,9 @@ export const createServer = async () => {
   });
 
   // Plugins
-  fastify.register(fastifyAutoload, {
-    dir: join(__dirname, "plugins"),
-  });
+  // fastify.register(fastifyAutoload, {
+  //   dir: join(__dirname, "plugins"),
+  // });
 
   /**
    * Register authentication endpoint
