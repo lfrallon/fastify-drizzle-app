@@ -7,7 +7,7 @@
     "build": "tsdown",
     "start": "node dist/index.mjs",
     "dev": "cross-env NODE_ENV=development tsx watch src/index.ts",
-    "dev:node": "cross-env NODE_ENV=development node --watch src/index.ts",
+    "dev:docker": "npm run dev",
     "format": "prettier --write \"src/**/*.ts\"",
     "auth:generate": "npx @better-auth/cli@latest generate",
     "db:generate": "drizzle-kit generate",

@@ -104,6 +104,7 @@ npm run db:studio  # Web interface for drizzle database
 - ✅ Type checking with `npm run typecheck`
 - ✅ Better Auth for authentication
 - ✅ Drizzle for database
+- ✅ Support Docker and Docker Compose
 
 ## License
 

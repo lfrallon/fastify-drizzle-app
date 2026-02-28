@@ -1,0 +1,147 @@
+# ========================================
+# Docker Compose Configuration
+# Modern Node.js Todo Application
+# ========================================
+
+services:
+  # ========================================
+  # Development Service
+  # ========================================
+  fastify-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: fastify-drizzle-app-dev
+    ports:
+      - '${APP_PORT}:3006' # API server
+      - '${DEBUG_PORT}:9229' # Node.js debugger
+    environment:
+      NODE_ENV: development
+      DOCKER_ENV: 'true'
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: fastifydb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD}'
+      ALLOWED_ORIGINS: '${ALLOWED_ORIGINS}'
+    volumes:
+      - ./src:/app/src:ro
+      - ./package.json:/app/package.json
+    depends_on:
+      db:
+        condition: service_healthy
+    develop:
+      watch:
+        - action: sync
+          path: ./src
+          target: /app/src
+          ignore:
+            - '**/*.test.*'
+            - '**/__tests__/**'
+        - action: rebuild
+          path: ./package.json
+    restart: unless-stopped
+    networks:
+      - fastify-drizzle-network
+
+  # ========================================
+  # Production Service
+  # ========================================
+  fastify-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: fastify-drizzle-app-prod
+    ports:
+      - '${PROD_PORT}:3006'
+    environment:
+      NODE_ENV: production
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: fastifydb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD:-todoapp_password}'
+      ALLOWED_ORIGINS: '${ALLOWED_ORIGINS}'
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: '${PROD_MEMORY_LIMIT:-2G}'
+          cpus: '${PROD_CPU_LIMIT:-1.0}'
+        reservations:
+          memory: '${PROD_MEMORY_RESERVATION:-512M}'
+          cpus: '${PROD_CPU_RESERVATION:-0.25}'
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    networks:
+      - fastify-drizzle-network
+    profiles:
+      - prod
+
+  # ========================================
+  # PostgreSQL Database Service
+  # ========================================
+  db:
+    image: postgres:18-alpine
+    container_name: fastify-drizzle-db
+    environment:
+      POSTGRES_DB: '${POSTGRES_DB}'
+      POSTGRES_USER: '${POSTGRES_USER}'
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD}'
+      TZ: Asia/Manila
+      PGTZ: Asia/Manila
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - '${DB_PORT}:5432'
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - fastify-drizzle-network
+
+  # ========================================
+  # Database Migration Service
+  # ========================================
+  migrate:
+    build: .
+    command: npm run drizzle:migrate
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - fastify-drizzle-network
+
+# ========================================
+# Volume Configuration
+# ========================================
+volumes:
+  postgres_data:
+    name: fastify-drizzle-postgres-data
+    driver: local
+
+# ========================================
+# Network Configuration
+# ========================================
+networks:
+  fastify-drizzle-network:
+    name: fastify-drizzle-network
+    driver: bridge

@@ -1,12 +1,12 @@
 import { createServer } from "#/server.ts";
 
-const FASTIFY_PORT = Number(process.env.FASTIFY_PORT) || 3006;
+const FASTIFY_PORT = Number(process.env.APP_PORT) || 3006;
 
 const main = async () => {
   const fastify = await createServer();
 
   try {
-    fastify.listen({ port: FASTIFY_PORT }, () => {
+    fastify.listen({ port: FASTIFY_PORT, host: "0.0.0.0" }, () => {
       fastify.log.info(`Listening on ${FASTIFY_PORT}...`);
     });
 

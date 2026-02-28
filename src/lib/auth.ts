@@ -27,6 +27,7 @@ const auth = betterAuth({
     "http://localhost:3000/*",
   ],
   advanced: {
+    trustedProxyHeaders: true,
     cookiePrefix: "fastify-drizzle",
     useSecureCookies: true,
   },
