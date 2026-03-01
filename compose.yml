@@ -31,6 +31,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      adminer:
+        condition: service_healthy
     develop:
       watch:
         - action: sync
@@ -113,22 +115,41 @@ services:
       - fastify-drizzle-network
 
   # ========================================
-  # Database Migration Service
+  # PostgreSQL Database Service
   # ========================================
-  migrate:
-    build: .
-    command: npm run drizzle:migrate
-    environment:
-      POSTGRES_HOST: db
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    depends_on:
-      db:
-        condition: service_healthy
+  adminer:
+    image: adminer
+    container_name: fastify-drizzle-adminer
+    ports:
+      - "0.0.0.0:8080:8080"
+    command: php -S 0.0.0.0:8080 -t /var/www/html
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     networks:
       - fastify-drizzle-network
+
+  # ========================================
+  # Database Migration Service
+  # ========================================
+  # migrate:
+  #   build: .
+  #   command: npm run drizzle:migrate
+  #   environment:
+  #     POSTGRES_HOST: db
+  #     POSTGRES_PORT: 5432
+  #     POSTGRES_DB: ${POSTGRES_DB}
+  #     POSTGRES_USER: ${POSTGRES_USER}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #   networks:
+  #     - fastify-drizzle-network
 
 # ========================================
 # Volume Configuration
