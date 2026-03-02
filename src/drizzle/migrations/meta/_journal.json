@@ -5,36 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1769601071661,
-      "tag": "0000_flimsy_dragon_man",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1770464475339,
-      "tag": "0001_stale_manta",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1770543900126,
-      "tag": "0002_watery_young_avengers",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1771657093228,
-      "tag": "0003_curly_blade",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1771851883870,
-      "tag": "0004_faulty_anthem",
+      "when": 1772445216173,
+      "tag": "0000_silly_madame_masque",
       "breakpoints": true
     }
   ]

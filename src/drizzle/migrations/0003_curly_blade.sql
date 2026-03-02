@@ -1,1 +1,0 @@
-ALTER TABLE "todos" ADD COLUMN "completed" boolean DEFAULT false NOT NULL;
