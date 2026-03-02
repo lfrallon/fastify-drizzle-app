@@ -15,14 +15,14 @@ services:
     container_name: fastify-drizzle-app-dev
     ports:
       - '${APP_PORT}:3006' # API server
-      - '${DEBUG_PORT}:9229' # Node.js debugger
+      # - '${DEBUG_PORT}:9229' # Node.js debugger
     environment:
       NODE_ENV: development
       DOCKER_ENV: 'true'
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
-      POSTGRES_DB: fastifydb
-      POSTGRES_USER: postgres
+      POSTGRES_DB: '${POSTGRES_DB:-fastifydb}'
+      POSTGRES_USER: '${POSTGRES_USER:-postgres}'
       POSTGRES_PASSWORD: '${POSTGRES_PASSWORD}'
       ALLOWED_ORIGINS: '${ALLOWED_ORIGINS}'
     volumes:
@@ -30,8 +30,6 @@ services:
       - ./package.json:/app/package.json
     depends_on:
       db:
-        condition: service_healthy
-      adminer:
         condition: service_healthy
     develop:
       watch:
@@ -62,8 +60,8 @@ services:
       NODE_ENV: production
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
-      POSTGRES_DB: fastifydb
-      POSTGRES_USER: postgres
+      POSTGRES_DB: '${POSTGRES_DB:-fastifydb}'
+      POSTGRES_USER: '${POSTGRES_USER:-postgres}'
       POSTGRES_PASSWORD: '${POSTGRES_PASSWORD:-todoapp_password}'
       ALLOWED_ORIGINS: '${ALLOWED_ORIGINS}'
     depends_on:
@@ -101,7 +99,7 @@ services:
       TZ: Asia/Manila
       PGTZ: Asia/Manila
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data:rw
     ports:
       - '${DB_PORT}:5432'
     restart: unless-stopped
@@ -124,40 +122,20 @@ services:
       - "0.0.0.0:8080:8080"
     command: php -S 0.0.0.0:8080 -t /var/www/html
     restart: always
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:8080"]
+    #   interval: 10s
+    #   timeout: 5s
+    #   retries: 3
+    #   start_period: 15s
     networks:
       - fastify-drizzle-network
-
-  # ========================================
-  # Database Migration Service
-  # ========================================
-  # migrate:
-  #   build: .
-  #   command: npm run drizzle:migrate
-  #   environment:
-  #     POSTGRES_HOST: db
-  #     POSTGRES_PORT: 5432
-  #     POSTGRES_DB: ${POSTGRES_DB}
-  #     POSTGRES_USER: ${POSTGRES_USER}
-  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-  #   depends_on:
-  #     db:
-  #       condition: service_healthy
-  #   networks:
-  #     - fastify-drizzle-network
 
 # ========================================
 # Volume Configuration
 # ========================================
 volumes:
   postgres_data:
-    name: fastify-drizzle-postgres-data
-    driver: local
 
 # ========================================
 # Network Configuration
