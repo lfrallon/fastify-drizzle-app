@@ -24,9 +24,8 @@ export default async function (fastify: TypedFastifyInstance) {
               description: "The id of the last item from the previous page",
               example: "",
             }),
-            createdAt: z.string().optional().meta({
-              description:
-                "The creation date of the last item from the previous page",
+            updatedAt: z.string().optional().meta({
+              description: "The date of the last item from the previous page",
               example: "",
             }),
             pageSize: z.coerce.number().default(10).meta({
@@ -38,13 +37,13 @@ export default async function (fastify: TypedFastifyInstance) {
               example: "desc",
             }),
           })
-          .refine((data) => !(data.id && !data.createdAt), {
+          .refine((data) => !(data.id && !data.updatedAt), {
             message: "'id' is required.",
             path: ["id"],
           })
-          .refine((data) => !(data.createdAt && !data.id), {
-            message: "'createdAt' is required.",
-            path: ["createdAt"],
+          .refine((data) => !(data.updatedAt && !data.id), {
+            message: "'updatedAt' is required.",
+            path: ["updatedAt"],
           }),
       },
     },
@@ -55,12 +54,12 @@ export default async function (fastify: TypedFastifyInstance) {
       }
 
       try {
-        const { createdAt, id, pageSize = 6, orderBy } = query;
+        const { updatedAt, id, pageSize = 6, orderBy } = query;
         const cursor =
-          createdAt && id
+          updatedAt && id
             ? {
                 id,
-                createdAt,
+                updatedAt,
               }
             : undefined;
         const limit = pageSize + 1;
@@ -92,10 +91,10 @@ export default async function (fastify: TypedFastifyInstance) {
               cursor
                 ? or(
                     orderBy === "desc"
-                      ? lt(todos.createdAt, cursor.createdAt)
-                      : gt(todos.createdAt, cursor.createdAt),
+                      ? lt(todos.updatedAt, cursor.updatedAt)
+                      : gt(todos.updatedAt, cursor.updatedAt),
                     and(
-                      eq(todos.createdAt, cursor.createdAt),
+                      eq(todos.updatedAt, cursor.updatedAt),
                       lt(todos.id, cursor.id),
                     ),
                   )
@@ -104,7 +103,7 @@ export default async function (fastify: TypedFastifyInstance) {
           )
           .limit(limit)
           .orderBy(
-            orderBy === "desc" ? desc(todos.createdAt) : asc(todos.createdAt),
+            orderBy === "desc" ? desc(todos.updatedAt) : asc(todos.updatedAt),
             orderBy === "desc" ? desc(todos.id) : asc(todos.id),
           );
 
@@ -121,8 +120,8 @@ export default async function (fastify: TypedFastifyInstance) {
           currentPageItems.length > 0
             ? {
                 id: currentPageItems[currentPageItems.length - 1].id,
-                createdAt:
-                  currentPageItems[currentPageItems.length - 1].createdAt,
+                updatedAt:
+                  currentPageItems[currentPageItems.length - 1].updatedAt,
               }
             : null;
 
