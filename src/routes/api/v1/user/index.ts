@@ -1,3 +1,4 @@
+import { fromNodeHeaders } from "better-auth/node";
 import { eq } from "drizzle-orm";
 import z from "zod";
 
@@ -43,7 +44,7 @@ const UpdateResponseSchema = {
       example: "2024-01-01T00:00:00.000Z",
     }),
   }),
-  403: z.object({
+  401: z.object({
     error: z.string().meta({
       description: "Unauthorized error message",
       example: "Unauthorized",
@@ -62,18 +63,15 @@ export default async function (fastify: TypedFastifyInstance) {
   fastify
     .withTypeProvider<FastifyZodOpenApiTypeProvider>()
     .get("", async function (request: FastifyRequest, reply: FastifyReply) {
-      const session = await auth.api.getSession({ headers: request.headers });
+      const session = await auth.api.getSession({
+        headers: fromNodeHeaders(request.headers),
+      });
       if (!session || !session.user) {
-        return reply.status(403).send({ error: "Unauthorized" });
+        return reply.status(401).send({ error: "Unauthorized" });
       }
 
       try {
-        const userInfo = await db
-          .select()
-          .from(user)
-          .where(eq(user.id, session.user.id));
-
-        return reply.send(userInfo[0]);
+        return reply.send(session.user);
       } catch (error) {
         return reply.code(500).send({ error: "Internal Server Error" });
       }
@@ -89,9 +87,11 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async ({ body, headers }, reply) => {
-      const session = await auth.api.getSession({ headers });
+      const session = await auth.api.getSession({
+        headers: fromNodeHeaders(headers),
+      });
       if (!session || !session.user) {
-        return reply.status(403).send({ error: "Unauthorized" });
+        return reply.status(401).send({ error: "Unauthorized" });
       }
 
       const { firstName, lastName } = body;

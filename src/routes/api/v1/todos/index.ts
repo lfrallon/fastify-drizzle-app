@@ -1,3 +1,4 @@
+import { fromNodeHeaders } from "better-auth/node";
 import { eq, inArray, or, and, desc, lt, gt, asc } from "drizzle-orm";
 import { z } from "zod";
 
@@ -48,9 +49,11 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async function ({ headers, query }, reply) {
-      const session = await auth.api.getSession({ headers });
+      const session = await auth.api.getSession({
+        headers: fromNodeHeaders(headers),
+      });
       if (!session || !session.user) {
-        return reply.status(403).send({ error: "Unauthorized" });
+        return reply.status(401).send({ error: "Unauthorized" });
       }
 
       try {
@@ -161,7 +164,9 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async ({ body, headers }, reply) => {
-      const session = await auth.api.getSession({ headers });
+      const session = await auth.api.getSession({
+        headers: fromNodeHeaders(headers),
+      });
       if (!session || !session.user) {
         reply.status(401).send({ message: "Unauthorized" });
         return;
@@ -204,9 +209,11 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async ({ body, headers }, reply) => {
-      const session = await auth.api.getSession({ headers });
+      const session = await auth.api.getSession({
+        headers: fromNodeHeaders(headers),
+      });
       if (!session || !session.user) {
-        return reply.status(403).send({ error: "Unauthorized" });
+        return reply.status(401).send({ error: "Unauthorized" });
       }
 
       const { ids } = body;
@@ -271,9 +278,11 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async ({ body, headers }, reply) => {
-      const session = await auth.api.getSession({ headers });
+      const session = await auth.api.getSession({
+        headers: fromNodeHeaders(headers),
+      });
       if (!session || !session.user) {
-        return reply.status(403).send({ error: "Unauthorized" });
+        return reply.status(401).send({ error: "Unauthorized" });
       }
 
       try {
