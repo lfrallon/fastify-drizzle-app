@@ -15,6 +15,13 @@ const auth = betterAuth({
     changeEmail: {
       enabled: true,
     },
+    additionalFields: {
+      roles: { type: "string[]", required: true },
+      permissions: {
+        type: "string[]",
+        required: true,
+      },
+    },
   },
   emailAndPassword: {
     enabled: true,

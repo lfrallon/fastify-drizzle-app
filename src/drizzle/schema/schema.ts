@@ -9,6 +9,7 @@ import {
   boolean,
   uuid,
   uniqueIndex,
+  pgEnum,
 } from "drizzle-orm/pg-core";
 
 export const account = pgTable(
@@ -47,6 +48,14 @@ export const account = pgTable(
   ],
 );
 
+export const userRolesEnum = pgEnum("user_roles", ["Admin", "User", "Guest"]);
+
+export const userPermissionsEnum = pgEnum("user_permissions", [
+  "Read",
+  "Write",
+  "Delete",
+]);
+
 export const user = pgTable(
   "user",
   {
@@ -55,6 +64,11 @@ export const user = pgTable(
     email: text().notNull(),
     image: text(),
     emailVerified: boolean("email_verified").default(false).notNull(),
+    roles: userRolesEnum("roles").array().notNull().default(["User"]),
+    permissions: userPermissionsEnum("permissions")
+      .array()
+      .notNull()
+      .default(["Read", "Write"]),
     createdAt: timestamp("created_at", { mode: "string" })
       .defaultNow()
       .notNull(),
