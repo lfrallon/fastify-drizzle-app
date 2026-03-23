@@ -4,6 +4,7 @@ import { z } from "zod";
 
 // types
 import type { FastifyZodOpenApiTypeProvider } from "fastify-zod-openapi";
+import type { IncomingHttpHeaders } from "node:http";
 import type { TypedFastifyInstance } from "#/types/index.ts";
 
 // auth lib
@@ -22,7 +23,7 @@ const rolePermissions: Record<string, TodoPermission[]> = {
 };
 
 async function ensureTodoPermission(
-  headers: Record<string, unknown>,
+  headers: IncomingHttpHeaders,
   permission: TodoPermission,
 ) {
   const session = await auth.api.getSession({
