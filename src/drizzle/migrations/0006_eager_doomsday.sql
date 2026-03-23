@@ -1,0 +1,2 @@
+CREATE TYPE "public"."user_permissions" AS ENUM('Create', 'Read', 'Update', 'Delete');--> statement-breakpoint
+ALTER TABLE "user" ADD COLUMN "permissions" "user_permissions"[] DEFAULT '{"Create","Read","Update"}' NOT NULL;

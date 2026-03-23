@@ -51,10 +51,10 @@ export const account = pgTable(
 export const userRoleEnum = pgEnum("user_role", ["Admin", "User", "Guest"]);
 
 export const userPermissionsEnum = pgEnum("user_permissions", [
+  "Create",
   "Read",
-  "Write",
-  "Delete",
   "Update",
+  "Delete",
 ]);
 
 export const user = pgTable(
@@ -69,7 +69,7 @@ export const user = pgTable(
     permissions: userPermissionsEnum("permissions")
       .array()
       .notNull()
-      .default(["Read", "Write"]),
+      .default(["Create", "Read", "Update"]),
     createdAt: timestamp("created_at", { mode: "string" })
       .defaultNow()
       .notNull(),

@@ -22,6 +22,34 @@
       "when": 1773489185173,
       "tag": "0002_fixed_paladin",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1774267037394,
+      "tag": "0003_acoustic_nico_minoru",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1774267168902,
+      "tag": "0004_faulty_captain_marvel",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1774267249575,
+      "tag": "0005_curly_kylun",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1774267279530,
+      "tag": "0006_eager_doomsday",
+      "breakpoints": true
     }
   ]
 }
