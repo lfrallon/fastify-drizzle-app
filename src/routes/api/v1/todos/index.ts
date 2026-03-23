@@ -11,7 +11,57 @@ import auth from "#/lib/auth.ts";
 
 // db
 import { db } from "#/db/index.ts";
-import { todos } from "#/drizzle/schema/schema.ts";
+import { todos, user } from "#/drizzle/schema/schema.ts";
+
+type TodoPermission = "Create" | "Read" | "Update" | "Delete";
+
+const rolePermissions: Record<string, TodoPermission[]> = {
+  Admin: ["Create", "Read", "Update", "Delete"],
+  User: ["Create", "Read", "Update"],
+  Guest: ["Read"],
+};
+
+async function ensureTodoPermission(
+  headers: Record<string, unknown>,
+  permission: TodoPermission,
+) {
+  const session = await auth.api.getSession({
+    headers: fromNodeHeaders(headers),
+  });
+
+  if (!session?.user) {
+    return { error: "Unauthorized", statusCode: 401 as const };
+  }
+
+  const currentUser = await db.query.user.findFirst({
+    where: eq(user.id, session.user.id),
+    columns: {
+      id: true,
+      role: true,
+      permissions: true,
+    },
+  });
+
+  if (!currentUser) {
+    return { error: "Unauthorized", statusCode: 401 as const };
+  }
+
+  const allowedPermissions = rolePermissions[currentUser.role] ?? [];
+  const assignedPermissions = new Set(currentUser.permissions ?? []);
+  const hasRolePermission = allowedPermissions.includes(permission);
+  const hasAssignedPermission =
+    currentUser.role === "Admin" || assignedPermissions.has(permission);
+
+  if (!hasRolePermission || !hasAssignedPermission) {
+    return {
+      error: "Forbidden",
+      message: `Missing ${permission} permission.`,
+      statusCode: 403 as const,
+    };
+  }
+
+  return { session, currentUser };
+}
 
 export default async function (fastify: TypedFastifyInstance) {
   // GET /api/v1/todos
@@ -49,11 +99,14 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async function ({ headers, query }, reply) {
-      const session = await auth.api.getSession({
-        headers: fromNodeHeaders(headers),
-      });
-      if (!session || !session.user) {
-        return reply.status(401).send({ error: "Unauthorized" });
+      const permissionResult = await ensureTodoPermission(headers, "Read");
+      if ("statusCode" in permissionResult) {
+        return reply.status(permissionResult.statusCode).send({
+          error: permissionResult.error,
+          ...(permissionResult.message
+            ? { message: permissionResult.message }
+            : {}),
+        });
       }
 
       try {
@@ -69,7 +122,7 @@ export default async function (fastify: TypedFastifyInstance) {
 
         const totalCount = await db.$count(
           todos,
-          eq(todos.userId, session.user.id),
+          eq(todos.userId, permissionResult.session.user.id),
         );
 
         if (totalCount === 0) {
@@ -88,9 +141,8 @@ export default async function (fastify: TypedFastifyInstance) {
           .select()
           .from(todos)
           .where(
-            // make sure to add indices for the columns that you use for cursor
             and(
-              eq(todos.userId, session.user.id),
+              eq(todos.userId, permissionResult.session.user.id),
               cursor
                 ? or(
                     orderBy === "desc"
@@ -110,15 +162,12 @@ export default async function (fastify: TypedFastifyInstance) {
             orderBy === "desc" ? desc(todos.id) : asc(todos.id),
           );
 
-        // Check if we got more items than the requested page size
         const hasNextPage = getPaginatedTodos.length > pageSize;
 
-        // If yes, slice the array to return only the requested page size
         const currentPageItems = hasNextPage
           ? getPaginatedTodos.slice(0, pageSize)
           : getPaginatedTodos;
 
-        // The next cursor will be the ID of the last item in the current page
         const newNextCursor =
           currentPageItems.length > 0
             ? {
@@ -127,14 +176,6 @@ export default async function (fastify: TypedFastifyInstance) {
                   currentPageItems[currentPageItems.length - 1].updatedAt,
               }
             : null;
-
-        // const getPaginatedTodos = await db
-        //   .select()
-        //   .from(todos)
-        //   .orderBy(asc(todos.id))
-        //   .limit(limit)
-        //   .offset(offset)
-        //   .where(eq(todos.userId, session.user.id));
 
         return reply.code(200).send({
           nodes: currentPageItems,
@@ -164,12 +205,14 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async ({ body, headers }, reply) => {
-      const session = await auth.api.getSession({
-        headers: fromNodeHeaders(headers),
-      });
-      if (!session || !session.user) {
-        reply.status(401).send({ message: "Unauthorized" });
-        return;
+      const permissionResult = await ensureTodoPermission(headers, "Create");
+      if ("statusCode" in permissionResult) {
+        return reply.status(permissionResult.statusCode).send({
+          error: permissionResult.error,
+          ...(permissionResult.message
+            ? { message: permissionResult.message }
+            : {}),
+        });
       }
 
       const { title } = body;
@@ -181,7 +224,7 @@ export default async function (fastify: TypedFastifyInstance) {
       try {
         const addedTodo = await db
           .insert(todos)
-          .values({ title, userId: session.user.id })
+          .values({ title, userId: permissionResult.session.user.id })
           .returning();
 
         return reply.send(addedTodo[0]);
@@ -209,11 +252,14 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async ({ body, headers }, reply) => {
-      const session = await auth.api.getSession({
-        headers: fromNodeHeaders(headers),
-      });
-      if (!session || !session.user) {
-        return reply.status(401).send({ error: "Unauthorized" });
+      const permissionResult = await ensureTodoPermission(headers, "Delete");
+      if ("statusCode" in permissionResult) {
+        return reply.status(permissionResult.statusCode).send({
+          error: permissionResult.error,
+          ...(permissionResult.message
+            ? { message: permissionResult.message }
+            : {}),
+        });
       }
 
       const { ids } = body;
@@ -225,7 +271,12 @@ export default async function (fastify: TypedFastifyInstance) {
       try {
         const deletedTodos = await db
           .delete(todos)
-          .where(and(eq(todos.userId, session.user.id), inArray(todos.id, ids)))
+          .where(
+            and(
+              eq(todos.userId, permissionResult.session.user.id),
+              inArray(todos.id, ids),
+            ),
+          )
           .returning();
 
         if (deletedTodos.length === 0) {
@@ -278,11 +329,14 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async ({ body, headers }, reply) => {
-      const session = await auth.api.getSession({
-        headers: fromNodeHeaders(headers),
-      });
-      if (!session || !session.user) {
-        return reply.status(401).send({ error: "Unauthorized" });
+      const permissionResult = await ensureTodoPermission(headers, "Update");
+      if ("statusCode" in permissionResult) {
+        return reply.status(permissionResult.statusCode).send({
+          error: permissionResult.error,
+          ...(permissionResult.message
+            ? { message: permissionResult.message }
+            : {}),
+        });
       }
 
       try {
@@ -294,12 +348,17 @@ export default async function (fastify: TypedFastifyInstance) {
           const existingTodo = await db
             .select()
             .from(todos)
-            .where(and(eq(todos.id, id), eq(todos.userId, session.user.id)))
+            .where(
+              and(
+                eq(todos.id, id),
+                eq(todos.userId, permissionResult.session.user.id),
+              ),
+            )
             .limit(1)
             .then((rows) => rows[0] || undefined);
 
           if (!existingTodo) {
-            continue; // Skip if the todo item doesn't exist or doesn't belong to the user
+            continue;
           }
 
           const updatedTodo = await db
