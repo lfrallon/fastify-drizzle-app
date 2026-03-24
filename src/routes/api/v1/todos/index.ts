@@ -1,68 +1,16 @@
-import { fromNodeHeaders } from "better-auth/node";
 import { eq, inArray, or, and, desc, lt, gt, asc } from "drizzle-orm";
 import { z } from "zod";
 
-// types
-import type { FastifyZodOpenApiTypeProvider } from "fastify-zod-openapi";
-import type { IncomingHttpHeaders } from "node:http";
-import type { TypedFastifyInstance } from "#/types/index.ts";
-
-// auth lib
-import auth from "#/lib/auth.ts";
-
 // db
 import { db } from "#/db/index.ts";
-import { todos, user } from "#/drizzle/schema/schema.ts";
+import { todos } from "#/drizzle/schema/schema.ts";
 
-type TodoPermission = "Create" | "Read" | "Update" | "Delete";
+// libs
+import { accessPermissionCheck } from "#/utils/rbac.ts";
 
-const rolePermissions: Record<string, TodoPermission[]> = {
-  Admin: ["Create", "Read", "Update", "Delete"],
-  User: ["Create", "Read", "Update"],
-  Guest: ["Read"],
-};
-
-async function ensureTodoPermission(
-  headers: IncomingHttpHeaders,
-  permission: TodoPermission,
-) {
-  const session = await auth.api.getSession({
-    headers: fromNodeHeaders(headers),
-  });
-
-  if (!session?.user) {
-    return { error: "Unauthorized", statusCode: 401 as const };
-  }
-
-  const currentUser = await db.query.user.findFirst({
-    where: eq(user.id, session.user.id),
-    columns: {
-      id: true,
-      role: true,
-      permissions: true,
-    },
-  });
-
-  if (!currentUser) {
-    return { error: "Unauthorized", statusCode: 401 as const };
-  }
-
-  const allowedPermissions = rolePermissions[currentUser.role] ?? [];
-  const assignedPermissions = new Set(currentUser.permissions ?? []);
-  const hasRolePermission = allowedPermissions.includes(permission);
-  const hasAssignedPermission =
-    currentUser.role === "Admin" || assignedPermissions.has(permission);
-
-  if (!hasRolePermission || !hasAssignedPermission) {
-    return {
-      error: "Forbidden",
-      message: `Missing ${permission} permission.`,
-      statusCode: 403 as const,
-    };
-  }
-
-  return { session, currentUser };
-}
+// types
+import type { FastifyZodOpenApiTypeProvider } from "fastify-zod-openapi";
+import type { TypedFastifyInstance } from "#/types/index.ts";
 
 export default async function (fastify: TypedFastifyInstance) {
   // GET /api/v1/todos
@@ -100,8 +48,8 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async function ({ headers, query }, reply) {
-      const permissionResult = await ensureTodoPermission(headers, "Read");
-      if ("statusCode" in permissionResult) {
+      const permissionResult = await accessPermissionCheck(headers, "Read");
+      if (!permissionResult.currentUser || !permissionResult.currentUser) {
         return reply.status(permissionResult.statusCode).send({
           error: permissionResult.error,
           ...(permissionResult.message
@@ -206,8 +154,8 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async ({ body, headers }, reply) => {
-      const permissionResult = await ensureTodoPermission(headers, "Create");
-      if ("statusCode" in permissionResult) {
+      const permissionResult = await accessPermissionCheck(headers, "Create");
+      if (!permissionResult.currentUser || !permissionResult.currentUser) {
         return reply.status(permissionResult.statusCode).send({
           error: permissionResult.error,
           ...(permissionResult.message
@@ -253,8 +201,8 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async ({ body, headers }, reply) => {
-      const permissionResult = await ensureTodoPermission(headers, "Delete");
-      if ("statusCode" in permissionResult) {
+      const permissionResult = await accessPermissionCheck(headers, "Delete");
+      if (!permissionResult.currentUser || !permissionResult.currentUser) {
         return reply.status(permissionResult.statusCode).send({
           error: permissionResult.error,
           ...(permissionResult.message
@@ -330,8 +278,8 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async ({ body, headers }, reply) => {
-      const permissionResult = await ensureTodoPermission(headers, "Update");
-      if ("statusCode" in permissionResult) {
+      const permissionResult = await accessPermissionCheck(headers, "Update");
+      if (!permissionResult.currentUser || !permissionResult.currentUser) {
         return reply.status(permissionResult.statusCode).send({
           error: permissionResult.error,
           ...(permissionResult.message
