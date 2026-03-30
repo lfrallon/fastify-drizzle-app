@@ -10,6 +10,7 @@ import {
   uuid,
   uniqueIndex,
   pgEnum,
+  real,
 } from "drizzle-orm/pg-core";
 
 export const account = pgTable(
@@ -135,6 +136,11 @@ export const todos = pgTable(
   {
     id: uuid().defaultRandom().primaryKey().notNull(),
     title: text().notNull(),
+    // Backward compatibility: legacy todos may not have geospatial data until backfilled.
+    latitude: real(),
+    longitude: real(),
+    // Optional message tied to map context; may be empty on older rows.
+    mapMessage: text("map_message"),
     completed: boolean().default(false).notNull(),
     createdAt: timestamp("created_at", { mode: "string" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "string" })
