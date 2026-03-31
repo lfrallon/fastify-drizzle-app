@@ -1,0 +1,201 @@
+import { fromNodeHeaders } from "better-auth/node";
+import { eq, inArray, or, and, desc, lt, gt, asc } from "drizzle-orm";
+import z from "zod";
+
+// libs
+import { accessPermissionCheck } from "#/utils/rbac.ts";
+
+// types
+import type { TypedFastifyInstance } from "#/types/index.ts";
+import type { FastifyZodOpenApiTypeProvider } from "fastify-zod-openapi";
+import auth from "#/lib/auth.ts";
+import { db } from "#/db/index.ts";
+import { mapMessages } from "#/drizzle/schema/schema.ts";
+
+export default async function (fastify: TypedFastifyInstance) {
+  // GET /api/v1/map-messages
+  fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().get(
+    "",
+    {
+      schema: {
+        querystring: z
+          .object({
+            id: z.string().optional().meta({
+              description: "The id of the last item from the previous page",
+              example: "",
+            }),
+            updatedAt: z.string().optional().meta({
+              description: "The date of the last item from the previous page",
+              example: "",
+            }),
+            pageSize: z.coerce.number().default(10).meta({
+              description: "Number of items to return per page",
+              example: 10,
+            }),
+            orderBy: z.enum(["asc", "desc"]).default("desc").meta({
+              description: "Order of the items",
+              example: "desc",
+            }),
+          })
+          .refine((data) => !(data.id && !data.updatedAt), {
+            message: "'id' is required.",
+            path: ["id"],
+          })
+          .refine((data) => !(data.updatedAt && !data.id), {
+            message: "'updatedAt' is required.",
+            path: ["updatedAt"],
+          }),
+      },
+    },
+    async ({ query, headers }, reply) => {
+      const session = await auth.api.getSession({
+        headers: fromNodeHeaders(headers),
+      });
+
+      try {
+        const { orderBy, pageSize, id, updatedAt } = query;
+
+        const cursor =
+          updatedAt && id
+            ? {
+                id,
+                updatedAt,
+              }
+            : undefined;
+        const limit = pageSize + 1;
+
+        const totalCount = await db.$count(mapMessages);
+
+        if (totalCount === 0) {
+          return reply.code(200).send({
+            nodes: [],
+            pageInfo: {
+              hasNextPage: false,
+              nextCursor: null,
+              totalPages: 0,
+            },
+            totalCount,
+          });
+        }
+
+        const getPaginatedTodos = await db
+          .select()
+          .from(mapMessages)
+          .where(
+            and(
+              cursor
+                ? or(
+                    orderBy === "desc"
+                      ? lt(mapMessages.updatedAt, cursor.updatedAt)
+                      : gt(mapMessages.updatedAt, cursor.updatedAt),
+                    and(
+                      eq(mapMessages.updatedAt, cursor.updatedAt),
+                      lt(mapMessages.id, cursor.id),
+                    ),
+                  )
+                : undefined,
+            ),
+          )
+          .limit(limit)
+          .orderBy(
+            orderBy === "desc"
+              ? desc(mapMessages.updatedAt)
+              : asc(mapMessages.updatedAt),
+            orderBy === "desc" ? desc(mapMessages.id) : asc(mapMessages.id),
+          );
+
+        const hasNextPage = getPaginatedTodos.length > pageSize;
+
+        const currentPageItems = hasNextPage
+          ? getPaginatedTodos.slice(0, pageSize)
+          : getPaginatedTodos;
+
+        const newNextCursor =
+          currentPageItems.length > 0
+            ? {
+                id: currentPageItems[currentPageItems.length - 1].id,
+                updatedAt:
+                  currentPageItems[currentPageItems.length - 1].updatedAt,
+              }
+            : null;
+
+        return reply.code(200).send({
+          nodes: currentPageItems,
+          pageInfo: {
+            hasNextPage,
+            nextCursor: newNextCursor,
+            totalPages: Math.ceil(totalCount / pageSize),
+          },
+          totalCount,
+        });
+      } catch (error) {
+        return reply.code(500).send({ error: "Internal Server Error" });
+      }
+    },
+  );
+
+  // POST /api/v1/map-messages
+  fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().post(
+    "/add",
+    {
+      schema: {
+        body: z.object({
+          title: z.string({ error: "Invalid input." }).meta({
+            description: "The title of the map message",
+            example: "Sample Map Message",
+          }),
+          mapMessage: z.string({ error: "Invalid input." }).meta({
+            description: "The content of the map message",
+            example: "Hello, this is a map message!",
+          }),
+          latitude: z.number({ error: "Invalid input." }).meta({
+            description: "Latitude of the map message",
+            example: 9.876,
+          }),
+          longitude: z.number({ error: "Invalid input." }).meta({
+            description: "Longitude of the map message",
+            example: 123.456,
+          }),
+        }),
+      },
+    },
+    async ({ body, headers }, reply) => {
+      const session = await auth.api.getSession({
+        headers: fromNodeHeaders(headers),
+      });
+
+      const { title, mapMessage, latitude, longitude } = body;
+
+      if (!title || title.length === 0) {
+        return reply.code(400).send({ error: "No title provided!" });
+      }
+
+      if (!mapMessage || mapMessage.length === 0) {
+        return reply.code(400).send({ error: "No map message provided!" });
+      }
+
+      if (latitude === undefined || longitude === undefined) {
+        return reply
+          .code(400)
+          .send({ error: "Latitude and longitude are required!" });
+      }
+
+      try {
+        const newMapMessage = await db
+          .insert(mapMessages)
+          .values({
+            title,
+            mapMessage,
+            latitude,
+            longitude,
+            userId: session?.user?.id,
+          })
+          .returning();
+
+        return reply.send(newMapMessage[0]);
+      } catch (error) {
+        return reply.code(500).send({ error: "Internal Server Error" });
+      }
+    },
+  );
+}
