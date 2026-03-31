@@ -1,5 +1,12 @@
 import { relations } from "drizzle-orm/relations";
-import { user, todos, account, session } from "./schema.ts";
+import { user, todos, account, session, mapMessages } from "./schema.ts";
+
+export const mapMessagesRelations = relations(mapMessages, ({ one }) => ({
+  user: one(user, {
+    fields: [mapMessages.userId],
+    references: [user.id],
+  }),
+}));
 
 export const todosRelations = relations(todos, ({ one }) => ({
   user: one(user, {

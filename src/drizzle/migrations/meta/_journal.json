@@ -50,6 +50,13 @@
       "when": 1774267279530,
       "tag": "0006_eager_doomsday",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1774958746264,
+      "tag": "0007_powerful_red_wolf",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,7 @@ import {
   index,
   foreignKey,
   text,
+  numeric,
   timestamp,
   unique,
   boolean,
@@ -151,5 +152,31 @@ export const todos = pgTable(
     }).onDelete("cascade"),
     index("todos_created_at_idx").on(table.createdAt),
     uniqueIndex("todos_id_idx").on(table.id),
+  ],
+);
+
+export const mapMessages = pgTable(
+  "map_messages",
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    title: text().notNull(),
+    mapMessage: text().notNull(),
+    latitude: numeric("latitude", { mode: "number" }).notNull(),
+    longitude: numeric("longitude", { mode: "number" }).notNull(),
+    createdAt: timestamp("created_at", { mode: "string" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "string" })
+      .defaultNow()
+      .$onUpdate(() => sql`CURRENT_TIMESTAMP`)
+      .notNull(),
+    userId: text("user_id"),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.userId],
+      foreignColumns: [user.id],
+      name: "map_messages_user_id_user_id_fk",
+    }).onDelete("cascade"),
+    index("map_messages_updated_at_idx").on(table.updatedAt),
+    uniqueIndex("map_messages_id_idx").on(table.id),
   ],
 );
