@@ -177,6 +177,11 @@ export const mapMessages = pgTable(
       name: "map_messages_user_id_user_id_fk",
     }).onDelete("cascade"),
     index("map_messages_updated_at_idx").on(table.updatedAt),
+    index("map_messages_lat_lng_updated_at_idx").on(
+      table.latitude,
+      table.longitude,
+      table.updatedAt.desc(),
+    ),
     uniqueIndex("map_messages_id_idx").on(table.id),
   ],
 );
