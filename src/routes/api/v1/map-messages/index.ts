@@ -1,5 +1,5 @@
 import { fromNodeHeaders } from "better-auth/node";
-import { eq, inArray, or, and, desc, lt, gt, asc } from "drizzle-orm";
+import { eq, or, and, desc, lt, gt, asc, gte, lte } from "drizzle-orm";
 import z from "zod";
 
 // libs
@@ -11,6 +11,23 @@ import type { FastifyZodOpenApiTypeProvider } from "fastify-zod-openapi";
 import auth from "#/lib/auth.ts";
 import { db } from "#/db/index.ts";
 import { mapMessages } from "#/drizzle/schema/schema.ts";
+
+function parseBboxString(bbox: string) {
+  const values = bbox.split(",").map((value) => Number(value.trim()));
+
+  if (values.length !== 4 || values.some((value) => Number.isNaN(value))) {
+    return null;
+  }
+
+  const [west, south, east, north] = values;
+
+  return {
+    west,
+    south,
+    east,
+    north,
+  };
+}
 
 export default async function (fastify: TypedFastifyInstance) {
   // GET /api/v1/map-messages
@@ -36,6 +53,36 @@ export default async function (fastify: TypedFastifyInstance) {
               description: "Order of the items",
               example: "desc",
             }),
+            bbox: z.string().optional().meta({
+              description: "Optional bbox in `west,south,east,north` format",
+              example: "-10,35,30,60",
+            }),
+            west: z.coerce.number().optional().meta({
+              description: "Western longitude bound",
+              example: -10,
+            }),
+            south: z.coerce.number().optional().meta({
+              description: "Southern latitude bound",
+              example: 35,
+            }),
+            east: z.coerce.number().optional().meta({
+              description: "Eastern longitude bound",
+              example: 30,
+            }),
+            north: z.coerce.number().optional().meta({
+              description: "Northern latitude bound",
+              example: 60,
+            }),
+            limit: z.coerce.number().optional().meta({
+              description:
+                "Optional alias for pageSize, clamped by the API for safety",
+              example: 200,
+            }),
+            zoomBucket: z.enum(["broad", "medium", "close"]).optional().meta({
+              description:
+                "Optional zoom bucket hint from the client for future sampling rules",
+              example: "broad",
+            }),
           })
           .refine((data) => !(data.id && !data.updatedAt), {
             message: "'id' is required.",
@@ -44,7 +91,25 @@ export default async function (fastify: TypedFastifyInstance) {
           .refine((data) => !(data.updatedAt && !data.id), {
             message: "'updatedAt' is required.",
             path: ["updatedAt"],
-          }),
+          })
+          .refine(
+            (data) =>
+              !(
+                (data.west !== undefined ||
+                  data.south !== undefined ||
+                  data.east !== undefined ||
+                  data.north !== undefined) &&
+                (data.west === undefined ||
+                  data.south === undefined ||
+                  data.east === undefined ||
+                  data.north === undefined)
+              ),
+            {
+              message:
+                "'west', 'south', 'east', and 'north' must all be provided together.",
+              path: ["west"],
+            },
+          ),
       },
     },
     async ({ query, headers }, reply) => {
@@ -53,7 +118,21 @@ export default async function (fastify: TypedFastifyInstance) {
       });
 
       try {
-        const { orderBy, pageSize, id, updatedAt } = query;
+        const {
+          orderBy,
+          pageSize,
+          id,
+          updatedAt,
+          bbox,
+          west,
+          south,
+          east,
+          north,
+          limit,
+        } = query;
+
+        const rawRequestedLimit = limit ?? pageSize;
+        const clampedPageSize = Math.min(Math.max(rawRequestedLimit, 1), 200);
 
         const cursor =
           updatedAt && id
@@ -62,7 +141,33 @@ export default async function (fastify: TypedFastifyInstance) {
                 updatedAt,
               }
             : undefined;
-        const limit = pageSize + 1;
+        const queryLimit = clampedPageSize + 1;
+
+        const parsedBboxFromString = bbox ? parseBboxString(bbox) : null;
+
+        if (bbox && !parsedBboxFromString) {
+          return reply.code(400).send({
+            error:
+              "Invalid 'bbox' format. Expected: west,south,east,north with numeric values.",
+          });
+        }
+
+        const hasExplicitBbox =
+          west !== undefined &&
+          south !== undefined &&
+          east !== undefined &&
+          north !== undefined;
+
+        const bboxFilter =
+          parsedBboxFromString ??
+          (hasExplicitBbox
+            ? {
+                west,
+                south,
+                east,
+                north,
+              }
+            : null);
 
         const totalCount = await db.$count(mapMessages);
 
@@ -83,6 +188,27 @@ export default async function (fastify: TypedFastifyInstance) {
           .from(mapMessages)
           .where(
             and(
+              bboxFilter
+                ? and(
+                    gte(mapMessages.latitude, bboxFilter.south),
+                    lte(mapMessages.latitude, bboxFilter.north),
+                    bboxFilter.west <= bboxFilter.east
+                      ? and(
+                          gte(mapMessages.longitude, bboxFilter.west),
+                          lte(mapMessages.longitude, bboxFilter.east),
+                        )
+                      : or(
+                          and(
+                            gte(mapMessages.longitude, bboxFilter.west),
+                            lte(mapMessages.longitude, 180),
+                          ),
+                          and(
+                            gte(mapMessages.longitude, -180),
+                            lte(mapMessages.longitude, bboxFilter.east),
+                          ),
+                        ),
+                  )
+                : undefined,
               cursor
                 ? or(
                     orderBy === "desc"
@@ -96,7 +222,7 @@ export default async function (fastify: TypedFastifyInstance) {
                 : undefined,
             ),
           )
-          .limit(limit)
+          .limit(queryLimit)
           .orderBy(
             orderBy === "desc"
               ? desc(mapMessages.updatedAt)
@@ -104,10 +230,10 @@ export default async function (fastify: TypedFastifyInstance) {
             orderBy === "desc" ? desc(mapMessages.id) : asc(mapMessages.id),
           );
 
-        const hasNextPage = getPaginatedTodos.length > pageSize;
+        const hasNextPage = getPaginatedTodos.length > clampedPageSize;
 
         const currentPageItems = hasNextPage
-          ? getPaginatedTodos.slice(0, pageSize)
+          ? getPaginatedTodos.slice(0, clampedPageSize)
           : getPaginatedTodos;
 
         const newNextCursor =
@@ -124,7 +250,7 @@ export default async function (fastify: TypedFastifyInstance) {
           pageInfo: {
             hasNextPage,
             nextCursor: newNextCursor,
-            totalPages: Math.ceil(totalCount / pageSize),
+            totalPages: Math.ceil(totalCount / clampedPageSize),
           },
           totalCount,
         });
