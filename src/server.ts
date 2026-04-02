@@ -173,9 +173,9 @@ export const createServer = async () => {
   });
 
   // Plugins
-  // fastify.register(fastifyAutoload, {
-  //   dir: join(__dirname, "plugins"),
-  // });
+  fastify.register(fastifyAutoload, {
+    dir: join(__dirname, "plugins"),
+  });
 
   /**
    * Register authentication endpoint
