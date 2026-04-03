@@ -24,6 +24,10 @@ services:
       POSTGRES_DB: '${POSTGRES_DB:-fastifydb}'
       POSTGRES_USER: '${POSTGRES_USER:-postgres}'
       POSTGRES_PASSWORD: '${POSTGRES_PASSWORD}'
+      REDIS_HOST: '${REDIS_HOST}'
+      REDIS_PORT: '${REDIS_PORT:-6379}'
+      REDIS_USERNAME: '${REDIS_USERNAME}'
+      REDIS_PASSWORD: '${REDIS_PASSWORD}'
       ALLOWED_ORIGINS: '${ALLOWED_ORIGINS}'
     volumes:
       - ./src:/app/src:ro
@@ -123,18 +127,13 @@ services:
   redis:
     image: redis:7-alpine
     container_name: fastify-drizzle-redis
-    environment:
-      REDIS_HOST: '${REDIS_HOST}'
-      REDIS_PORT: '${REDIS_PORT}'
-      REDIS_USERNAME: '${REDIS_USERNAME}'
-      REDIS_PASSWORD: '${REDIS_PASSWORD}'
     restart: unless-stopped
     command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
     volumes:
       - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
       - redis_data:/data
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "--user", "${REDIS_USERNAME}", "--pass", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
