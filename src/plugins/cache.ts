@@ -33,17 +33,23 @@ export default fp(async (fastify: FastifyInstance) => {
       await redis.del(key);
     },
 
-    async wrap<T>(key: string, ttl: number, fn: () => Promise<T>): Promise<T> {
-      const cached = await redis.get(key);
-
-      if (cached) {
-        return JSON.parse(cached);
+    async wrap<T>(key: string, ttl: number, fn: () => Promise<T>) {
+      try {
+        const cached = await redis.get(key);
+        if (cached) return JSON.parse(cached);
+      } catch (err) {
+        fastify.log.warn(
+          { err },
+          "Redis cache read failed, falling back to DB",
+        );
       }
 
       const result = await fn();
 
-      if (result !== null && result !== undefined) {
+      try {
         await redis.set(key, JSON.stringify(result), "EX", ttl);
+      } catch (err) {
+        fastify.log.warn({ err }, "Redis cache write failed");
       }
 
       return result;
