@@ -197,6 +197,27 @@ export default async function (fastify: TypedFastifyInstance) {
                 north,
               }
             : null);
+        const bboxCondition = bboxFilter
+          ? and(
+              gte(mapMessages.latitude, bboxFilter.south),
+              lte(mapMessages.latitude, bboxFilter.north),
+              bboxFilter.west <= bboxFilter.east
+                ? and(
+                    gte(mapMessages.longitude, bboxFilter.west),
+                    lte(mapMessages.longitude, bboxFilter.east),
+                  )
+                : or(
+                    and(
+                      gte(mapMessages.longitude, bboxFilter.west),
+                      lte(mapMessages.longitude, 180),
+                    ),
+                    and(
+                      gte(mapMessages.longitude, -180),
+                      lte(mapMessages.longitude, bboxFilter.east),
+                    ),
+                  ),
+            )
+          : undefined;
         const cacheKey = buildMapMessagesCacheKey({
           orderBy,
           clampedPageSize,
@@ -204,7 +225,7 @@ export default async function (fastify: TypedFastifyInstance) {
           bboxFilter,
         });
 
-        const totalCount = await db.$count(mapMessages);
+        const totalCount = await db.$count(mapMessages, bboxCondition);
 
         if (totalCount === 0) {
           return reply.code(200).send({
@@ -227,27 +248,7 @@ export default async function (fastify: TypedFastifyInstance) {
               .from(mapMessages)
               .where(
                 and(
-                  bboxFilter
-                    ? and(
-                        gte(mapMessages.latitude, bboxFilter.south),
-                        lte(mapMessages.latitude, bboxFilter.north),
-                        bboxFilter.west <= bboxFilter.east
-                          ? and(
-                              gte(mapMessages.longitude, bboxFilter.west),
-                              lte(mapMessages.longitude, bboxFilter.east),
-                            )
-                          : or(
-                              and(
-                                gte(mapMessages.longitude, bboxFilter.west),
-                                lte(mapMessages.longitude, 180),
-                              ),
-                              and(
-                                gte(mapMessages.longitude, -180),
-                                lte(mapMessages.longitude, bboxFilter.east),
-                              ),
-                            ),
-                      )
-                    : undefined,
+                  bboxCondition,
                   cursor
                     ? or(
                         orderBy === "desc"
