@@ -13,6 +13,7 @@ declare module "fastify" {
       get<T>(key: string): Promise<T | null>;
       set(key: string, value: unknown, ttl?: number): Promise<void>;
       del(key: string): Promise<void>;
+      delByPrefix(prefix: string): Promise<void>;
       wrap<T>(key: string, ttl: number, fn: () => Promise<T>): Promise<T>;
     };
   }
@@ -31,6 +32,27 @@ export default fp(async (fastify: FastifyInstance) => {
 
     async del(key: string) {
       await redis.del(key);
+    },
+
+    async delByPrefix(prefix: string) {
+      const pattern = `${prefix}*`;
+      let cursor = "0";
+
+      do {
+        const [nextCursor, keys] = await redis.scan(
+          cursor,
+          "MATCH",
+          pattern,
+          "COUNT",
+          100,
+        );
+
+        cursor = nextCursor;
+
+        if (keys.length > 0) {
+          await redis.del(...keys);
+        }
+      } while (cursor !== "0");
     },
 
     async wrap<T>(key: string, ttl: number, fn: () => Promise<T>) {

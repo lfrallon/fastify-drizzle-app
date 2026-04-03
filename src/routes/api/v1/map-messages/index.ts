@@ -46,7 +46,7 @@ function buildMapMessagesCacheKey(params: {
   const { orderBy, clampedPageSize, cursor, bboxFilter } = params;
 
   return [
-    "mapMessages",
+    "mapMessages:",
     `orderBy:${orderBy}`,
     `pageSize:${clampedPageSize}`,
     `cursorId:${cursor?.id ?? "none"}`,
@@ -361,8 +361,8 @@ export default async function (fastify: TypedFastifyInstance) {
           })
           .returning();
 
-        // ✅ invalidate related read cache
-        await fastify.cache.del("mapMessages");
+        // ✅ invalidate related read caches
+        await fastify.cache.delByPrefix("mapMessages:");
 
         return reply.send(newMapMessage[0]);
       } catch (error) {
