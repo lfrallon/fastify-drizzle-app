@@ -165,16 +165,16 @@ export const createServer = async () => {
     transformSpecificationClone: true,
   });
 
+  // Plugins
+  fastify.register(fastifyAutoload, {
+    dir: join(__dirname, "plugins"),
+  });
+
   // Routes
   fastify.register(fastifyAutoload, {
     dir: join(__dirname, "routes"),
     prefix: "/",
     routeParams: true,
-  });
-
-  // Plugins
-  fastify.register(fastifyAutoload, {
-    dir: join(__dirname, "plugins"),
   });
 
   /**
