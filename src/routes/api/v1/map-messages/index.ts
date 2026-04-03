@@ -29,6 +29,35 @@ function parseBboxString(bbox: string) {
   };
 }
 
+function buildMapMessagesCacheKey(params: {
+  orderBy: "asc" | "desc";
+  clampedPageSize: number;
+  cursor?: {
+    id: string;
+    updatedAt: string;
+  };
+  bboxFilter?: {
+    west: number;
+    south: number;
+    east: number;
+    north: number;
+  } | null;
+}) {
+  const { orderBy, clampedPageSize, cursor, bboxFilter } = params;
+
+  return [
+    "mapMessages",
+    `orderBy:${orderBy}`,
+    `pageSize:${clampedPageSize}`,
+    `cursorId:${cursor?.id ?? "none"}`,
+    `cursorUpdatedAt:${cursor?.updatedAt ?? "none"}`,
+    `west:${bboxFilter?.west ?? "none"}`,
+    `south:${bboxFilter?.south ?? "none"}`,
+    `east:${bboxFilter?.east ?? "none"}`,
+    `north:${bboxFilter?.north ?? "none"}`,
+  ].join("|");
+}
+
 export default async function (fastify: TypedFastifyInstance) {
   // GET /api/v1/map-messages
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().get(
@@ -168,6 +197,12 @@ export default async function (fastify: TypedFastifyInstance) {
                 north,
               }
             : null);
+        const cacheKey = buildMapMessagesCacheKey({
+          orderBy,
+          clampedPageSize,
+          cursor,
+          bboxFilter,
+        });
 
         const totalCount = await db.$count(mapMessages);
 
@@ -184,7 +219,7 @@ export default async function (fastify: TypedFastifyInstance) {
         }
 
         const getPaginatedTodos = await fastify.cache.wrap(
-          "mapMessages",
+          cacheKey,
           300,
           async () => {
             const todosCached = await db
