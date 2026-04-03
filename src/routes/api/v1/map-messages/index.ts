@@ -183,52 +183,60 @@ export default async function (fastify: TypedFastifyInstance) {
           });
         }
 
-        const getPaginatedTodos = await db
-          .select()
-          .from(mapMessages)
-          .where(
-            and(
-              bboxFilter
-                ? and(
-                    gte(mapMessages.latitude, bboxFilter.south),
-                    lte(mapMessages.latitude, bboxFilter.north),
-                    bboxFilter.west <= bboxFilter.east
-                      ? and(
-                          gte(mapMessages.longitude, bboxFilter.west),
-                          lte(mapMessages.longitude, bboxFilter.east),
-                        )
-                      : or(
-                          and(
-                            gte(mapMessages.longitude, bboxFilter.west),
-                            lte(mapMessages.longitude, 180),
-                          ),
-                          and(
-                            gte(mapMessages.longitude, -180),
-                            lte(mapMessages.longitude, bboxFilter.east),
-                          ),
+        const getPaginatedTodos = await fastify.cache.wrap(
+          "mapMessages",
+          300,
+          async () => {
+            const todosCached = await db
+              .select()
+              .from(mapMessages)
+              .where(
+                and(
+                  bboxFilter
+                    ? and(
+                        gte(mapMessages.latitude, bboxFilter.south),
+                        lte(mapMessages.latitude, bboxFilter.north),
+                        bboxFilter.west <= bboxFilter.east
+                          ? and(
+                              gte(mapMessages.longitude, bboxFilter.west),
+                              lte(mapMessages.longitude, bboxFilter.east),
+                            )
+                          : or(
+                              and(
+                                gte(mapMessages.longitude, bboxFilter.west),
+                                lte(mapMessages.longitude, 180),
+                              ),
+                              and(
+                                gte(mapMessages.longitude, -180),
+                                lte(mapMessages.longitude, bboxFilter.east),
+                              ),
+                            ),
+                      )
+                    : undefined,
+                  cursor
+                    ? or(
+                        orderBy === "desc"
+                          ? lt(mapMessages.updatedAt, cursor.updatedAt)
+                          : gt(mapMessages.updatedAt, cursor.updatedAt),
+                        and(
+                          eq(mapMessages.updatedAt, cursor.updatedAt),
+                          lt(mapMessages.id, cursor.id),
                         ),
-                  )
-                : undefined,
-              cursor
-                ? or(
-                    orderBy === "desc"
-                      ? lt(mapMessages.updatedAt, cursor.updatedAt)
-                      : gt(mapMessages.updatedAt, cursor.updatedAt),
-                    and(
-                      eq(mapMessages.updatedAt, cursor.updatedAt),
-                      lt(mapMessages.id, cursor.id),
-                    ),
-                  )
-                : undefined,
-            ),
-          )
-          .limit(queryLimit)
-          .orderBy(
-            orderBy === "desc"
-              ? desc(mapMessages.updatedAt)
-              : asc(mapMessages.updatedAt),
-            orderBy === "desc" ? desc(mapMessages.id) : asc(mapMessages.id),
-          );
+                      )
+                    : undefined,
+                ),
+              )
+              .limit(queryLimit)
+              .orderBy(
+                orderBy === "desc"
+                  ? desc(mapMessages.updatedAt)
+                  : asc(mapMessages.updatedAt),
+                orderBy === "desc" ? desc(mapMessages.id) : asc(mapMessages.id),
+              );
+
+            return todosCached;
+          },
+        );
 
         const hasNextPage = getPaginatedTodos.length > clampedPageSize;
 
@@ -317,6 +325,9 @@ export default async function (fastify: TypedFastifyInstance) {
             userId: session?.user?.id,
           })
           .returning();
+
+        // ✅ invalidate related read cache
+        await fastify.cache.del("mapMessages");
 
         return reply.send(newMapMessage[0]);
       } catch (error) {
