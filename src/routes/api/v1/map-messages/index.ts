@@ -2,15 +2,16 @@ import { fromNodeHeaders } from "better-auth/node";
 import { eq, or, and, desc, lt, gt, asc, gte, lte } from "drizzle-orm";
 import z from "zod";
 
-// libs
-import { accessPermissionCheck } from "#/utils/rbac.ts";
+// lib
+import auth from "#/lib/auth.ts";
+
+// db & schema
+import { db } from "#/db/index.ts";
+import { mapMessages } from "#/drizzle/schema/schema.ts";
 
 // types
 import type { TypedFastifyInstance } from "#/types/index.ts";
 import type { FastifyZodOpenApiTypeProvider } from "fastify-zod-openapi";
-import auth from "#/lib/auth.ts";
-import { db } from "#/db/index.ts";
-import { mapMessages } from "#/drizzle/schema/schema.ts";
 
 function parseBboxString(bbox: string) {
   const values = bbox.split(",").map((value) => Number(value.trim()));
@@ -141,11 +142,7 @@ export default async function (fastify: TypedFastifyInstance) {
           ),
       },
     },
-    async ({ query, headers }, reply) => {
-      const session = await auth.api.getSession({
-        headers: fromNodeHeaders(headers),
-      });
-
+    async ({ query }, reply) => {
       try {
         const {
           orderBy,
