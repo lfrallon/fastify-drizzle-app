@@ -323,6 +323,11 @@ export default async function (fastify: TypedFastifyInstance) {
             description: "Longitude of the map message",
             example: 123.456,
           }),
+          videoUrl: z.string().optional().meta({
+            description:
+              "Optional URL of a video associated with the map message",
+            example: "https://example.com/video.mp4",
+          }),
         }),
       },
     },
@@ -331,7 +336,7 @@ export default async function (fastify: TypedFastifyInstance) {
         headers: fromNodeHeaders(headers),
       });
 
-      const { title, mapMessage, latitude, longitude } = body;
+      const { title, mapMessage, latitude, longitude, videoUrl } = body;
 
       if (!title || title.length === 0) {
         return reply.code(400).send({ error: "No title provided!" });
@@ -356,6 +361,7 @@ export default async function (fastify: TypedFastifyInstance) {
             latitude,
             longitude,
             userId: session?.user?.id,
+            videoUrl,
           })
           .returning();
 

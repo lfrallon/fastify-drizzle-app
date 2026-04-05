@@ -64,6 +64,13 @@
       "when": 1775046657445,
       "tag": "0008_happy_orb",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1775387658438,
+      "tag": "0009_last_electro",
+      "breakpoints": true
     }
   ]
 }

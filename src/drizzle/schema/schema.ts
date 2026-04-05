@@ -169,6 +169,7 @@ export const mapMessages = pgTable(
       .$onUpdate(() => sql`CURRENT_TIMESTAMP`)
       .notNull(),
     userId: text("user_id"),
+    videoUrl: text("video_url"),
   },
   (table) => [
     foreignKey({
