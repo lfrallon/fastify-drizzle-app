@@ -80,6 +80,7 @@ export default async function (fastify: TypedFastifyInstance) {
         const queryLimit = clampedPageSize + 1;
 
         const cacheKey = buildTodosCacheKey({
+          userId: permissionResult.session.user.id,
           clampedPageSize,
           orderBy,
           cursor,

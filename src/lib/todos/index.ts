@@ -8,6 +8,7 @@
  * "|":
  */
 export function buildTodosCacheKey(params: {
+  userId: string;
   orderBy: "asc" | "desc";
   clampedPageSize: number;
   cursor?: {
@@ -15,10 +16,11 @@ export function buildTodosCacheKey(params: {
     updatedAt: string;
   };
 }) {
-  const { orderBy, clampedPageSize, cursor } = params;
+  const { userId, orderBy, clampedPageSize, cursor } = params;
 
   return [
     "todos:",
+    `userId:${userId}`,
     `orderBy:${orderBy}`,
     `pageSize:${clampedPageSize}`,
     `cursorId:${cursor?.id ?? "none"}`,
