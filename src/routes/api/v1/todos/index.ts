@@ -7,6 +7,7 @@ import { todos } from "#/drizzle/schema/schema.ts";
 
 // libs
 import { accessPermissionCheck } from "#/utils/rbac.ts";
+import { buildTodosCacheKey } from "#/lib/todos/index.ts";
 
 // types
 import type { FastifyZodOpenApiTypeProvider } from "fastify-zod-openapi";
@@ -36,6 +37,11 @@ export default async function (fastify: TypedFastifyInstance) {
               description: "Order of the items",
               example: "desc",
             }),
+            limit: z.coerce.number().optional().meta({
+              description:
+                "Optional alias for pageSize, clamped by the API for safety",
+              example: 200,
+            }),
           })
           .refine((data) => !(data.id && !data.updatedAt), {
             message: "'id' is required.",
@@ -59,7 +65,11 @@ export default async function (fastify: TypedFastifyInstance) {
       }
 
       try {
-        const { updatedAt, id, pageSize = 6, orderBy } = query;
+        const { updatedAt, id, pageSize, orderBy, limit } = query;
+
+        const rawRequestedLimit = limit ?? pageSize;
+        const clampedPageSize = Math.min(Math.max(rawRequestedLimit, 1), 200);
+
         const cursor =
           updatedAt && id
             ? {
@@ -67,7 +77,13 @@ export default async function (fastify: TypedFastifyInstance) {
                 updatedAt,
               }
             : undefined;
-        const limit = pageSize + 1;
+        const queryLimit = clampedPageSize + 1;
+
+        const cacheKey = buildTodosCacheKey({
+          clampedPageSize,
+          orderBy,
+          cursor,
+        });
 
         const totalCount = await db.$count(
           todos,
@@ -86,35 +102,45 @@ export default async function (fastify: TypedFastifyInstance) {
           });
         }
 
-        const getPaginatedTodos = await db
-          .select()
-          .from(todos)
-          .where(
-            and(
-              eq(todos.userId, permissionResult.session.user.id),
-              cursor
-                ? or(
-                    orderBy === "desc"
-                      ? lt(todos.updatedAt, cursor.updatedAt)
-                      : gt(todos.updatedAt, cursor.updatedAt),
-                    and(
-                      eq(todos.updatedAt, cursor.updatedAt),
-                      lt(todos.id, cursor.id),
-                    ),
-                  )
-                : undefined,
-            ),
-          )
-          .limit(limit)
-          .orderBy(
-            orderBy === "desc" ? desc(todos.updatedAt) : asc(todos.updatedAt),
-            orderBy === "desc" ? desc(todos.id) : asc(todos.id),
-          );
+        const getPaginatedTodos = await fastify.cache.wrap(
+          cacheKey,
+          300,
+          async () => {
+            const todosCached = await db
+              .select()
+              .from(todos)
+              .where(
+                and(
+                  eq(todos.userId, permissionResult.session.user.id),
+                  cursor
+                    ? or(
+                        orderBy === "desc"
+                          ? lt(todos.updatedAt, cursor.updatedAt)
+                          : gt(todos.updatedAt, cursor.updatedAt),
+                        and(
+                          eq(todos.updatedAt, cursor.updatedAt),
+                          lt(todos.id, cursor.id),
+                        ),
+                      )
+                    : undefined,
+                ),
+              )
+              .limit(queryLimit)
+              .orderBy(
+                orderBy === "desc"
+                  ? desc(todos.updatedAt)
+                  : asc(todos.updatedAt),
+                orderBy === "desc" ? desc(todos.id) : asc(todos.id),
+              );
 
-        const hasNextPage = getPaginatedTodos.length > pageSize;
+            return todosCached;
+          },
+        );
+
+        const hasNextPage = getPaginatedTodos.length > clampedPageSize;
 
         const currentPageItems = hasNextPage
-          ? getPaginatedTodos.slice(0, pageSize)
+          ? getPaginatedTodos.slice(0, clampedPageSize)
           : getPaginatedTodos;
 
         const newNextCursor =
@@ -131,7 +157,7 @@ export default async function (fastify: TypedFastifyInstance) {
           pageInfo: {
             hasNextPage,
             nextCursor: newNextCursor,
-            totalPages: Math.ceil(totalCount / pageSize),
+            totalPages: Math.ceil(totalCount / clampedPageSize),
           },
           totalCount,
         });
@@ -175,6 +201,8 @@ export default async function (fastify: TypedFastifyInstance) {
           .insert(todos)
           .values({ title, userId: permissionResult.session.user.id })
           .returning();
+
+        await fastify.cache.delByPrefix("todos:");
 
         return reply.send(addedTodo[0]);
       } catch (error) {
@@ -231,6 +259,8 @@ export default async function (fastify: TypedFastifyInstance) {
         if (deletedTodos.length === 0) {
           return reply.code(404).send({ error: "Request not completed." });
         }
+
+        await fastify.cache.delByPrefix("todos:");
 
         return reply.send({
           message: `${deletedTodos.length} item/s deleted successfully`,
@@ -330,6 +360,8 @@ export default async function (fastify: TypedFastifyInstance) {
             error: "No items were updated. Please check the provided ids.",
           });
         }
+
+        await fastify.cache.delByPrefix("todos:");
 
         return reply.send({
           message: `${updatedTodos.length} item/s updated successfully`,
