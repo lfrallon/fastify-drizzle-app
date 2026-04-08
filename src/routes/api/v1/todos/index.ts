@@ -203,7 +203,7 @@ export default async function (fastify: TypedFastifyInstance) {
           .values({ title, userId: permissionResult.session.user.id })
           .returning();
 
-        await fastify.cache.delByPrefix("todos:");
+        await fastify.cache.delByPrefix(`todos:|userId:${permissionResult.session.user.id}|`);
 
         return reply.send(addedTodo[0]);
       } catch (error) {
@@ -261,7 +261,7 @@ export default async function (fastify: TypedFastifyInstance) {
           return reply.code(404).send({ error: "Request not completed." });
         }
 
-        await fastify.cache.delByPrefix("todos:");
+        await fastify.cache.delByPrefix(`todos:|userId:${permissionResult.session.user.id}|`);
 
         return reply.send({
           message: `${deletedTodos.length} item/s deleted successfully`,
@@ -362,7 +362,7 @@ export default async function (fastify: TypedFastifyInstance) {
           });
         }
 
-        await fastify.cache.delByPrefix("todos:");
+        await fastify.cache.delByPrefix(`todos:|userId:${permissionResult.session.user.id}|`);
 
         return reply.send({
           message: `${updatedTodos.length} item/s updated successfully`,
