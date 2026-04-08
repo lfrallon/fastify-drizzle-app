@@ -4,6 +4,10 @@ import z from "zod";
 
 // lib
 import auth from "#/lib/auth.ts";
+import {
+  buildMapMessagesCacheKey,
+  parseBboxString,
+} from "#/lib/map-messages/index.ts";
 
 // db & schema
 import { db } from "#/db/index.ts";
@@ -12,52 +16,6 @@ import { mapMessages } from "#/drizzle/schema/schema.ts";
 // types
 import type { TypedFastifyInstance } from "#/types/index.ts";
 import type { FastifyZodOpenApiTypeProvider } from "fastify-zod-openapi";
-
-function parseBboxString(bbox: string) {
-  const values = bbox.split(",").map((value) => Number(value.trim()));
-
-  if (values.length !== 4 || values.some((value) => Number.isNaN(value))) {
-    return null;
-  }
-
-  const [west, south, east, north] = values;
-
-  return {
-    west,
-    south,
-    east,
-    north,
-  };
-}
-
-function buildMapMessagesCacheKey(params: {
-  orderBy: "asc" | "desc";
-  clampedPageSize: number;
-  cursor?: {
-    id: string;
-    updatedAt: string;
-  };
-  bboxFilter?: {
-    west: number;
-    south: number;
-    east: number;
-    north: number;
-  } | null;
-}) {
-  const { orderBy, clampedPageSize, cursor, bboxFilter } = params;
-
-  return [
-    "mapMessages:",
-    `orderBy:${orderBy}`,
-    `pageSize:${clampedPageSize}`,
-    `cursorId:${cursor?.id ?? "none"}`,
-    `cursorUpdatedAt:${cursor?.updatedAt ?? "none"}`,
-    `west:${bboxFilter?.west ?? "none"}`,
-    `south:${bboxFilter?.south ?? "none"}`,
-    `east:${bboxFilter?.east ?? "none"}`,
-    `north:${bboxFilter?.north ?? "none"}`,
-  ].join("|");
-}
 
 export default async function (fastify: TypedFastifyInstance) {
   // GET /api/v1/map-messages
