@@ -1,5 +1,5 @@
 import { fromNodeHeaders } from "better-auth/node";
-import { eq, or, and, desc, lt, gt, asc, gte, lte } from "drizzle-orm";
+import { eq, or, and, desc, lt, gt, asc, gte, lte, inArray } from "drizzle-orm";
 import z from "zod";
 
 // lib
@@ -8,6 +8,7 @@ import {
   buildMapMessagesCacheKey,
   parseBboxString,
 } from "#/lib/map-messages/index.ts";
+import { accessPermissionCheck } from "#/utils/rbac.ts";
 
 // db & schema
 import { db } from "#/db/index.ts";
@@ -327,6 +328,73 @@ export default async function (fastify: TypedFastifyInstance) {
         await fastify.cache.delByPrefix("mapMessages:");
 
         return reply.send(newMapMessage[0]);
+      } catch (error) {
+        return reply.code(500).send({ error: "Internal Server Error" });
+      }
+    },
+  );
+
+  // DELETE /api/v1/map-messages
+  fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().delete(
+    "",
+    {
+      schema: {
+        body: z.object({
+          ids: z
+            .array(z.uuid(), {
+              error: "No id's provided.",
+            })
+            .meta({
+              description: "Map messages id's",
+              example: ["123e4567-e89b-12d3-a456-426614174000"],
+            }),
+        }),
+      },
+    },
+    async ({ body, headers }, reply) => {
+      const permissionResult = await accessPermissionCheck(headers, "Delete");
+      if (!permissionResult.currentUser || !permissionResult.currentUser) {
+        return reply.status(permissionResult.statusCode).send({
+          error: permissionResult.error,
+          ...(permissionResult.message
+            ? { message: permissionResult.message }
+            : {}),
+        });
+      }
+
+      if (permissionResult.currentUser.role !== "Admin") {
+        return reply
+          .status(401)
+          .send({ error: "Request cannot be fullfiled." });
+      }
+
+      try {
+        const { ids } = body;
+
+        if (!ids || ids.length === 0) {
+          return reply.code(400).send({ error: "No id's provided." });
+        }
+
+        const deletedMapMessages = await db
+          .delete(mapMessages)
+          .where(inArray(mapMessages.id, ids))
+          .returning();
+
+        if (deletedMapMessages.length === 0) {
+          return reply.code(404).send({ error: "Request not completed." });
+        }
+
+        await fastify.cache.delByPrefix(
+          `todos:|userId:${permissionResult.session.user.id}|`,
+        );
+
+        return reply.send({
+          message: `${deletedMapMessages.length} item/s deleted successfully`,
+          deletedItems: deletedMapMessages.map((item) => ({
+            id: item.id,
+            title: item.title,
+          })),
+        });
       } catch (error) {
         return reply.code(500).send({ error: "Internal Server Error" });
       }
