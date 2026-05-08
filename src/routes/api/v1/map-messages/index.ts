@@ -340,14 +340,56 @@ export default async function (fastify: TypedFastifyInstance) {
     {
       schema: {
         body: z.object({
-          ids: z
-            .array(z.uuid(), {
-              error: "No id's provided.",
-            })
-            .meta({
-              description: "Map messages id's",
-              example: ["123e4567-e89b-12d3-a456-426614174000"],
+          data: z.array(
+            z.object({
+              id: z.uuid().meta({
+                description: "The id of the todo item",
+                example: "123e4567-e89b-12d3-a456-426614174000",
+              }),
+              updatedAt: z.string().optional().meta({
+                description: "The date of the last item from the previous page",
+                example: "",
+              }),
+              pageSize: z.coerce.number().default(10).meta({
+                description: "Number of items to return per page",
+                example: 10,
+              }),
+              orderBy: z.enum(["asc", "desc"]).default("desc").meta({
+                description: "Order of the items",
+                example: "desc",
+              }),
+              bbox: z.string().optional().meta({
+                description: "Optional bbox in `west,south,east,north` format",
+                example: "-10,35,30,60",
+              }),
+              west: z.coerce.number().optional().meta({
+                description: "Western longitude bound",
+                example: -10,
+              }),
+              south: z.coerce.number().optional().meta({
+                description: "Southern latitude bound",
+                example: 35,
+              }),
+              east: z.coerce.number().optional().meta({
+                description: "Eastern longitude bound",
+                example: 30,
+              }),
+              north: z.coerce.number().optional().meta({
+                description: "Northern latitude bound",
+                example: 60,
+              }),
+              limit: z.coerce.number().optional().meta({
+                description:
+                  "Optional alias for pageSize, clamped by the API for safety",
+                example: 200,
+              }),
+              zoomBucket: z.enum(["broad", "medium", "close"]).optional().meta({
+                description:
+                  "Optional zoom bucket hint from the client for future sampling rules",
+                example: "broad",
+              }),
             }),
+          ),
         }),
       },
     },
@@ -369,11 +411,13 @@ export default async function (fastify: TypedFastifyInstance) {
       }
 
       try {
-        const { ids } = body;
+        const { data } = body;
 
-        if (!ids || ids.length === 0) {
-          return reply.code(400).send({ error: "No id's provided." });
+        if (!data || data.length === 0) {
+          return reply.code(400).send({ error: "No data provided." });
         }
+
+        const ids = data.map((item) => item.id);
 
         const deletedMapMessages = await db
           .delete(mapMessages)
@@ -384,9 +428,69 @@ export default async function (fastify: TypedFastifyInstance) {
           return reply.code(404).send({ error: "Request not completed." });
         }
 
-        await fastify.cache.delByPrefix(
-          `todos:|userId:${permissionResult.session.user.id}|`,
-        );
+        const cacheKeys: string[] = [];
+        for (let i = 0; i < data.length; i++) {
+          const {
+            orderBy,
+            pageSize,
+            id,
+            updatedAt,
+            bbox,
+            west,
+            south,
+            east,
+            north,
+            limit,
+          } = data[i];
+
+          const rawRequestedLimit = limit ?? pageSize;
+          const clampedPageSize = Math.min(Math.max(rawRequestedLimit, 1), 200);
+
+          const cursor =
+            updatedAt && id
+              ? {
+                  id,
+                  updatedAt,
+                }
+              : undefined;
+
+          const parsedBboxFromString = bbox ? parseBboxString(bbox) : null;
+
+          if (bbox && !parsedBboxFromString) {
+            return reply.code(400).send({
+              error:
+                "Invalid 'bbox' format. Expected: west,south,east,north with numeric values.",
+            });
+          }
+
+          const hasExplicitBbox =
+            west !== undefined &&
+            south !== undefined &&
+            east !== undefined &&
+            north !== undefined;
+
+          const bboxFilter =
+            parsedBboxFromString ??
+            (hasExplicitBbox
+              ? {
+                  west,
+                  south,
+                  east,
+                  north,
+                }
+              : null);
+          const cacheKey = buildMapMessagesCacheKey({
+            orderBy,
+            clampedPageSize,
+            cursor,
+            bboxFilter,
+          });
+          cacheKeys.push(cacheKey);
+        }
+
+        for (let i = 0; i < cacheKeys.length; i++) {
+          await fastify.cache.delByPrefix(cacheKeys[i]);
+        }
 
         return reply.send({
           message: `${deletedMapMessages.length} item/s deleted successfully`,
