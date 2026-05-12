@@ -504,4 +504,239 @@ export default async function (fastify: TypedFastifyInstance) {
       }
     },
   );
+
+  // PUT /api/v1/map-messages
+  fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().put(
+    "/update",
+    {
+      schema: {
+        body: z.object({
+          data: z.array(
+            z
+              .object({
+                id: z.uuid().meta({
+                  description: "The id of the todo item",
+                  example: "123e4567-e89b-12d3-a456-426614174000",
+                }),
+                title: z.string().optional().meta({
+                  description: "The new title of the todo item",
+                  example: "Water the plants.",
+                }),
+                mapMessage: z.string({ error: "Invalid input." }).meta({
+                  description: "The content of the map message",
+                  example: "Hello, this is a map message!",
+                }),
+                videoUrl: z.string().optional().meta({
+                  description:
+                    "Optional URL of a video associated with the map message",
+                  example: "https://example.com/video.mp4",
+                }),
+                updatedAt: z.string().optional().meta({
+                  description:
+                    "The date of the last item from the previous page",
+                  example: "",
+                }),
+                pageSize: z.coerce.number().default(10).meta({
+                  description: "Number of items to return per page",
+                  example: 10,
+                }),
+                orderBy: z.enum(["asc", "desc"]).default("desc").meta({
+                  description: "Order of the items",
+                  example: "desc",
+                }),
+                bbox: z.string().optional().meta({
+                  description:
+                    "Optional bbox in `west,south,east,north` format",
+                  example: "-10,35,30,60",
+                }),
+                west: z.coerce.number().optional().meta({
+                  description: "Western longitude bound",
+                  example: -10,
+                }),
+                south: z.coerce.number().optional().meta({
+                  description: "Southern latitude bound",
+                  example: 35,
+                }),
+                east: z.coerce.number().optional().meta({
+                  description: "Eastern longitude bound",
+                  example: 30,
+                }),
+                north: z.coerce.number().optional().meta({
+                  description: "Northern latitude bound",
+                  example: 60,
+                }),
+                limit: z.coerce.number().optional().meta({
+                  description:
+                    "Optional alias for pageSize, clamped by the API for safety",
+                  example: 200,
+                }),
+                zoomBucket: z
+                  .enum(["broad", "medium", "close"])
+                  .optional()
+                  .meta({
+                    description:
+                      "Optional zoom bucket hint from the client for future sampling rules",
+                    example: "broad",
+                  }),
+              })
+              .refine(
+                (data) =>
+                  data.title !== undefined || data.mapMessage !== undefined,
+                {
+                  message:
+                    "At least one of 'title' or 'message' must be provided.",
+                },
+              ),
+          ),
+        }),
+      },
+    },
+    async ({ body, headers }, reply) => {
+      const permissionResult = await accessPermissionCheck(headers, "Update");
+      if (!permissionResult.currentUser || !permissionResult.currentUser) {
+        return reply.status(permissionResult.statusCode).send({
+          error: permissionResult.error,
+          ...(permissionResult.message
+            ? { message: permissionResult.message }
+            : {}),
+        });
+      }
+
+      if (
+        permissionResult.currentUser.role !== "Admin" ||
+        !permissionResult.currentUser.permissions.includes("Update")
+      ) {
+        return reply
+          .status(401)
+          .send({ error: "Request cannot be fullfiled." });
+      }
+
+      try {
+        const { data } = body;
+
+        if (!data || data.length === 0) {
+          return reply.code(400).send({ error: "No data provided." });
+        }
+
+        const updatedMapMessages = [];
+
+        for (const item of data) {
+          const { id, title, mapMessage, videoUrl } = item;
+
+          const existingMapMessages = await db
+            .select()
+            .from(mapMessages)
+            .where(eq(mapMessages.id, id))
+            .limit(1)
+            .then((rows) => rows[0] || undefined);
+
+          if (!existingMapMessages) {
+            continue;
+          }
+
+          const updatedMapMessage = await db
+            .update(mapMessages)
+            .set({
+              title: title !== undefined ? title : existingMapMessages.title,
+              mapMessage:
+                mapMessage !== undefined
+                  ? mapMessage
+                  : existingMapMessages.mapMessage,
+              videoUrl:
+                videoUrl !== undefined
+                  ? videoUrl
+                  : existingMapMessages.videoUrl,
+            })
+            .where(eq(mapMessages.id, id))
+            .returning();
+
+          if (updatedMapMessage.length > 0) {
+            updatedMapMessages.push(updatedMapMessage[0]);
+          }
+        }
+
+        if (updatedMapMessages.length === 0) {
+          return reply.code(404).send({
+            error: "No items were updated. Please check the provided ids.",
+          });
+        }
+
+        const cacheKeys: string[] = [];
+        for (let i = 0; i < data.length; i++) {
+          const {
+            orderBy,
+            pageSize,
+            id,
+            updatedAt,
+            bbox,
+            west,
+            south,
+            east,
+            north,
+            limit,
+          } = data[i];
+
+          const rawRequestedLimit = limit ?? pageSize;
+          const clampedPageSize = Math.min(Math.max(rawRequestedLimit, 1), 200);
+
+          const cursor =
+            updatedAt && id
+              ? {
+                  id,
+                  updatedAt,
+                }
+              : undefined;
+
+          const parsedBboxFromString = bbox ? parseBboxString(bbox) : null;
+
+          if (bbox && !parsedBboxFromString) {
+            return reply.code(400).send({
+              error:
+                "Invalid 'bbox' format. Expected: west,south,east,north with numeric values.",
+            });
+          }
+
+          const hasExplicitBbox =
+            west !== undefined &&
+            south !== undefined &&
+            east !== undefined &&
+            north !== undefined;
+
+          const bboxFilter =
+            parsedBboxFromString ??
+            (hasExplicitBbox
+              ? {
+                  west,
+                  south,
+                  east,
+                  north,
+                }
+              : null);
+          const cacheKey = buildMapMessagesCacheKey({
+            orderBy,
+            clampedPageSize,
+            cursor,
+            bboxFilter,
+          });
+          cacheKeys.push(cacheKey);
+        }
+
+        for (let i = 0; i < cacheKeys.length; i++) {
+          await fastify.cache.delByPrefix(cacheKeys[i]);
+        }
+
+        return reply.send({
+          message: `${updatedMapMessages.length} item/s updated successfully`,
+          updatedItems: updatedMapMessages.map((item) => ({
+            id: item.id,
+            title: item.title,
+            mapMessage: item.mapMessage,
+            videoUrl: item.videoUrl,
+          })),
+        });
+      } catch (_error) {
+        return reply.code(500).send({ error: "Internal Server Error" });
+      }
+    },
+  );
 }
