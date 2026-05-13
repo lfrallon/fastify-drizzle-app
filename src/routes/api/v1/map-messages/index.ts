@@ -602,10 +602,7 @@ export default async function (fastify: TypedFastifyInstance) {
         });
       }
 
-      if (
-        permissionResult.currentUser.role !== "Admin" ||
-        !permissionResult.currentUser.permissions.includes("Update")
-      ) {
+      if (!permissionResult.currentUser.permissions.includes("Update")) {
         return reply
           .status(401)
           .send({ error: "Request cannot be fullfiled." });
@@ -623,10 +620,18 @@ export default async function (fastify: TypedFastifyInstance) {
         for (const item of data) {
           const { id, title, mapMessage, videoUrl } = item;
 
+          const whereConditions =
+            permissionResult.currentUser.role === "Admin"
+              ? eq(mapMessages.id, id)
+              : and(
+                  eq(mapMessages.id, id),
+                  eq(mapMessages.userId, permissionResult.session.user.id),
+                );
+
           const existingMapMessages = await db
             .select()
             .from(mapMessages)
-            .where(eq(mapMessages.id, id))
+            .where(whereConditions)
             .limit(1)
             .then((rows) => rows[0] || undefined);
 
@@ -647,7 +652,7 @@ export default async function (fastify: TypedFastifyInstance) {
                   ? videoUrl
                   : existingMapMessages.videoUrl,
             })
-            .where(eq(mapMessages.id, id))
+            .where(whereConditions)
             .returning();
 
           if (updatedMapMessage.length > 0) {
@@ -657,7 +662,7 @@ export default async function (fastify: TypedFastifyInstance) {
 
         if (updatedMapMessages.length === 0) {
           return reply.code(404).send({
-            error: "No items were updated. Please check the provided ids.",
+            error: "No items were updated. Please check the provided data.",
           });
         }
 
