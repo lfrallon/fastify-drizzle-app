@@ -16,11 +16,7 @@ const auth = betterAuth({
       enabled: true,
     },
     additionalFields: {
-      role: { type: "string", required: true },
-      permissions: {
-        type: "string[]",
-        required: true,
-      },
+      roleId: { type: "string" },
     },
   },
   emailAndPassword: {
