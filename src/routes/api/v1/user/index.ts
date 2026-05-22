@@ -64,6 +64,33 @@ const UpdateResponseSchema = {
   }),
 };
 
+const AccessResponseSchema = {
+  200: z.object({
+    id: z.string(),
+    role: z.string().nullable(),
+    permissions: z.array(z.string()),
+  }),
+  401: z.object({
+    error: z.string().meta({
+      description: "Unauthorized error message",
+      example: "Unauthorized",
+    }),
+  }),
+  403: z.object({
+    error: z.string().meta({
+      description: "Forbidden error message",
+      example: "Forbidden",
+    }),
+    message: z.string().optional(),
+  }),
+  500: z.object({
+    error: z.string().meta({
+      description: "Internal Server Error message",
+      example: "Internal Server Error",
+    }),
+  }),
+};
+
 export default async function (fastify: TypedFastifyInstance) {
   // GET /api/v1/user
   fastify
@@ -129,6 +156,42 @@ export default async function (fastify: TypedFastifyInstance) {
           .returning();
 
         return reply.code(200).send(updateUser[0]);
+      } catch (error) {
+        return reply.code(500).send({ error: "Internal Server Error" });
+      }
+    },
+  );
+
+  // GET /api/v1/user/access
+  fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().get(
+    "/access",
+    {
+      schema: {
+        response: AccessResponseSchema,
+      },
+    },
+    async function (request: FastifyRequest, reply: FastifyReply) {
+      const permissionResult = await accessPermissionCheck(
+        request.headers,
+        "user:read",
+      );
+      if (!permissionResult.currentUser || !permissionResult.session) {
+        const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
+
+        return reply.status(statusCode).send({
+          error: permissionResult.error,
+          ...(permissionResult.message
+            ? { message: permissionResult.message }
+            : {}),
+        });
+      }
+
+      try {
+        return reply.code(200).send({
+          id: permissionResult.session.user.roleId,
+          role: permissionResult.currentUser.role,
+          permissions: permissionResult.currentUser.permissions,
+        });
       } catch (error) {
         return reply.code(500).send({ error: "Internal Server Error" });
       }
