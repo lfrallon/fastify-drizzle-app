@@ -54,7 +54,7 @@ async function getRolePermissions(roleName: string): Promise<Permission[]> {
   return permissionsList;
 }
 
-async function getUserAccess(userId: string, roleId: string) {
+async function getUserAccess(userId: string) {
   const userRecord = await db.query.user.findFirst({
     where: eq(user.id, userId),
     columns: {
@@ -72,22 +72,15 @@ async function getUserAccess(userId: string, roleId: string) {
   }
 
   const roleRecord = await db.query.role.findFirst({
-    where: eq(role.id, roleId),
+    where: eq(role.id, userRecord.roleId),
     columns: {
       name: true,
     },
   });
 
-  const permissions = await db.query.rolePermission.findMany({
-    where: eq(rolePermission.roleId, roleId),
-    columns: {
-      permission: true,
-    },
-  });
-
   return {
     role: roleRecord?.name || "Guest",
-    permissions: permissions.map((p) => p.permission as Permission) || [],
+    permissions: [] as Permission[],
   };
 }
 
@@ -123,10 +116,7 @@ export async function accessPermissionCheck(
 
   const { user } = session;
 
-  const userAccess = await getUserAccess(
-    options?.ownerId ?? user.id,
-    user.roleId,
-  );
+  const userAccess = await getUserAccess(user.id);
   const userRole = userAccess.role;
   const customPermissions = userAccess.permissions;
 
