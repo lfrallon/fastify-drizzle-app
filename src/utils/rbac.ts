@@ -54,7 +54,7 @@ async function getRolePermissions(roleName: string): Promise<Permission[]> {
   return permissionsList;
 }
 
-async function getUserAccess(userId: string, roleId: string) {
+async function getUserAccess(userId: string) {
   const userRecord = await db.query.user.findFirst({
     where: eq(user.id, userId),
     columns: {
@@ -71,23 +71,27 @@ async function getUserAccess(userId: string, roleId: string) {
     };
   }
 
-  const roleRecord = await db.query.role.findFirst({
-    where: eq(role.id, roleId),
-    columns: {
-      name: true,
-    },
-  });
+  const roleRecord = userRecord.roleId
+    ? await db.query.role.findFirst({
+        where: eq(role.id, userRecord.roleId),
+        columns: {
+          name: true,
+        },
+      })
+    : null;
 
-  const permissions = await db.query.rolePermission.findMany({
-    where: eq(rolePermission.roleId, roleId),
-    columns: {
-      permission: true,
-    },
-  });
+  const permissions = userRecord.roleId
+    ? await db.query.rolePermission.findMany({
+        where: eq(rolePermission.roleId, userRecord.roleId),
+        columns: {
+          permission: true,
+        },
+      })
+    : [];
 
   return {
     role: roleRecord?.name || "Guest",
-    permissions: permissions.map((p) => p.permission as Permission) || [],
+    permissions: permissions.map((p) => p.permission as Permission),
   };
 }
 
@@ -123,12 +127,12 @@ export async function accessPermissionCheck(
 
   const { user } = session;
 
-  const userAccess = await getUserAccess(
-    options?.ownerId ?? user.id,
-    user.roleId,
-  );
+  const userAccess = await getUserAccess(user.id);
   const userRole = userAccess.role;
   const customPermissions = userAccess.permissions;
+
+  const inheritedPermissions = await getRolePermissions(userRole);
+  const allPermissions = [...new Set([...inheritedPermissions, ...customPermissions])];
 
   if (userRole === "Admin") {
     return {
@@ -136,18 +140,12 @@ export async function accessPermissionCheck(
       currentUser: {
         ...user,
         role: userRole,
-        permissions: customPermissions,
+        permissions: allPermissions,
       },
     };
   }
 
-  const inheritedPermissions = await getRolePermissions(userRole);
-  const allPermissions = new Set([
-    ...inheritedPermissions,
-    ...customPermissions,
-  ]);
-
-  if (!allPermissions.has(requiredPermission)) {
+  if (!new Set(allPermissions).has(requiredPermission)) {
     return {
       error: "Forbidden",
       message: `Missing permission: ${requiredPermission}`,

@@ -105,7 +105,7 @@ export default async function (fastify: TypedFastifyInstance) {
           headers,
           "map-messages:read",
         );
-        if (!permissionResult.currentUser || !permissionResult.currentUser) {
+        if (!permissionResult.currentUser || !permissionResult.session) {
           return reply.status(permissionResult.statusCode).send({
             error: permissionResult.error,
             ...(permissionResult.message
@@ -308,7 +308,7 @@ export default async function (fastify: TypedFastifyInstance) {
       );
       console.log("🚀 ~ permissionResult:", permissionResult);
 
-      if (!permissionResult.currentUser || !permissionResult.currentUser) {
+      if (!permissionResult.currentUser || !permissionResult.session) {
         return reply.status(permissionResult.statusCode).send({
           error: permissionResult.error,
           ...(permissionResult.message
@@ -420,7 +420,7 @@ export default async function (fastify: TypedFastifyInstance) {
         headers,
         "map-messages:delete",
       );
-      if (!permissionResult.currentUser || !permissionResult.currentUser) {
+      if (!permissionResult.currentUser || !permissionResult.session) {
         return reply.status(permissionResult.statusCode).send({
           error: permissionResult.error,
           ...(permissionResult.message
@@ -642,7 +642,7 @@ export default async function (fastify: TypedFastifyInstance) {
         headers,
         "map-messages:update",
       );
-      if (!permissionResult.currentUser || !permissionResult.currentUser) {
+      if (!permissionResult.currentUser || !permissionResult.session) {
         return reply.status(permissionResult.statusCode).send({
           error: permissionResult.error,
           ...(permissionResult.message

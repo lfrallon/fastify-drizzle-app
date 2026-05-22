@@ -1,4 +1,3 @@
-import { fromNodeHeaders } from "better-auth/node";
 import { eq } from "drizzle-orm";
 import z from "zod";
 
@@ -11,7 +10,7 @@ import type {
 import type { TypedFastifyInstance } from "#/types/index.ts";
 
 // auth lib
-import auth from "#/lib/auth.ts";
+import { accessPermissionCheck } from "#/utils/rbac.ts";
 
 // db
 import { db } from "#/db/index.ts";
@@ -50,6 +49,13 @@ const UpdateResponseSchema = {
       example: "Unauthorized",
     }),
   }),
+  403: z.object({
+    error: z.string().meta({
+      description: "Forbidden error message",
+      example: "Forbidden",
+    }),
+    message: z.string().optional(),
+  }),
   500: z.object({
     error: z.string().meta({
       description: "Internal Server Error message",
@@ -63,15 +69,23 @@ export default async function (fastify: TypedFastifyInstance) {
   fastify
     .withTypeProvider<FastifyZodOpenApiTypeProvider>()
     .get("", async function (request: FastifyRequest, reply: FastifyReply) {
-      const session = await auth.api.getSession({
-        headers: fromNodeHeaders(request.headers),
-      });
-      if (!session || !session.user) {
-        return reply.status(401).send({ error: "Unauthorized" });
+      const permissionResult = await accessPermissionCheck(
+        request.headers,
+        "user:read",
+      );
+      if (!permissionResult.currentUser || !permissionResult.session) {
+        const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
+
+        return reply.status(statusCode).send({
+          error: permissionResult.error,
+          ...(permissionResult.message
+            ? { message: permissionResult.message }
+            : {}),
+        });
       }
 
       try {
-        return reply.send(session.user);
+        return reply.send(permissionResult.session.user);
       } catch (error) {
         return reply.code(500).send({ error: "Internal Server Error" });
       }
@@ -87,11 +101,19 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async ({ body, headers }, reply) => {
-      const session = await auth.api.getSession({
-        headers: fromNodeHeaders(headers),
-      });
-      if (!session || !session.user) {
-        return reply.status(401).send({ error: "Unauthorized" });
+      const permissionResult = await accessPermissionCheck(
+        headers,
+        "user:update",
+      );
+      if (!permissionResult.currentUser || !permissionResult.session) {
+        const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
+
+        return reply.status(statusCode).send({
+          error: permissionResult.error,
+          ...(permissionResult.message
+            ? { message: permissionResult.message }
+            : {}),
+        });
       }
 
       const { firstName, lastName } = body;
@@ -103,7 +125,7 @@ export default async function (fastify: TypedFastifyInstance) {
             name: `${firstName} ${lastName}`,
             updatedAt: new Date().toISOString(),
           })
-          .where(eq(user.id, session.user.id))
+          .where(eq(user.id, permissionResult.session.user.id))
           .returning();
 
         return reply.code(200).send(updateUser[0]);

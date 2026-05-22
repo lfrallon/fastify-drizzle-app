@@ -58,7 +58,7 @@ export default async function (fastify: TypedFastifyInstance) {
         headers,
         "todos:read",
       );
-      if (!permissionResult.currentUser || !permissionResult.currentUser) {
+      if (!permissionResult.currentUser || !permissionResult.session) {
         return reply.status(permissionResult.statusCode).send({
           error: permissionResult.error,
           ...(permissionResult.message
@@ -188,7 +188,7 @@ export default async function (fastify: TypedFastifyInstance) {
         headers,
         "todos:create",
       );
-      if (!permissionResult.currentUser || !permissionResult.currentUser) {
+      if (!permissionResult.currentUser || !permissionResult.session) {
         return reply.status(permissionResult.statusCode).send({
           error: permissionResult.error,
           ...(permissionResult.message
@@ -242,7 +242,7 @@ export default async function (fastify: TypedFastifyInstance) {
         headers,
         "todos:delete",
       );
-      if (!permissionResult.currentUser || !permissionResult.currentUser) {
+      if (!permissionResult.currentUser || !permissionResult.session) {
         return reply.status(permissionResult.statusCode).send({
           error: permissionResult.error,
           ...(permissionResult.message
@@ -326,7 +326,7 @@ export default async function (fastify: TypedFastifyInstance) {
         headers,
         "todos:update",
       );
-      if (!permissionResult.currentUser || !permissionResult.currentUser) {
+      if (!permissionResult.currentUser || !permissionResult.session) {
         return reply.status(permissionResult.statusCode).send({
           error: permissionResult.error,
           ...(permissionResult.message
