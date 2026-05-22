@@ -1,0 +1,1 @@
+ALTER TYPE "public"."permission" ADD VALUE 'map-messages:update' BEFORE 'map-messages:delete';

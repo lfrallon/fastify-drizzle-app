@@ -1,0 +1,1 @@
+ALTER TABLE "user" ALTER COLUMN "role_id" SET DEFAULT '4ddfae2c-7bb1-44ac-9f0f-401c521a0e7c';
