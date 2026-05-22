@@ -1,5 +1,13 @@
 import { relations } from "drizzle-orm/relations";
-import { user, todos, account, session, mapMessages } from "./schema.ts";
+import {
+  user,
+  todos,
+  account,
+  session,
+  mapMessages,
+  role,
+  rolePermission,
+} from "./schema.ts";
 
 export const mapMessagesRelations = relations(mapMessages, ({ one }) => ({
   user: one(user, {
@@ -32,5 +40,16 @@ export const sessionRelations = relations(session, ({ one }) => ({
   user: one(user, {
     fields: [session.userId],
     references: [user.id],
+  }),
+}));
+
+export const roleRelations = relations(role, ({ many }) => ({
+  permissions: many(rolePermission),
+}));
+
+export const rolePermissionRelations = relations(rolePermission, ({ one }) => ({
+  role: one(role, {
+    fields: [rolePermission.roleId],
+    references: [role.id],
   }),
 }));

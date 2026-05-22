@@ -49,13 +49,17 @@ export const account = pgTable(
   ],
 );
 
-export const userRoleEnum = pgEnum("user_role", ["Admin", "User", "Guest"]);
-
-export const userPermissionsEnum = pgEnum("user_permissions", [
-  "Create",
-  "Read",
-  "Update",
-  "Delete",
+export const permissionEnum = pgEnum("permission", [
+  "user:read",
+  "user:update",
+  "todos:read",
+  "todos:create",
+  "todos:update",
+  "todos:delete",
+  "map-messages:read",
+  "map-messages:create",
+  "map-messages:update",
+  "map-messages:delete",
 ]);
 
 export const user = pgTable(
@@ -66,19 +70,23 @@ export const user = pgTable(
     email: text().notNull(),
     image: text(),
     emailVerified: boolean("email_verified").default(false).notNull(),
-    role: userRoleEnum("role").notNull().default("User"),
-    permissions: userPermissionsEnum("permissions")
-      .array()
-      .notNull()
-      .default(["Create", "Read", "Update"]),
     createdAt: timestamp("created_at", { mode: "string" })
       .defaultNow()
       .notNull(),
     updatedAt: timestamp("updated_at", { mode: "string" })
       .defaultNow()
       .notNull(),
+    roleId: text("role_id"),
   },
-  (table) => [unique("user_email_unique").on(table.email)],
+  (table) => [
+    foreignKey({
+      columns: [table.roleId],
+      foreignColumns: [role.id],
+      name: "user_role_id_role_id_fk",
+    }).onDelete("cascade"),
+    index("user_roleId_idx").on(table.roleId),
+    unique("user_email_unique").on(table.email),
+  ],
 );
 
 export const verification = pgTable(
@@ -184,5 +192,34 @@ export const mapMessages = pgTable(
       table.updatedAt.desc(),
     ),
     uniqueIndex("map_messages_id_idx").on(table.id),
+  ],
+);
+
+export const role = pgTable("role", {
+  id: text().primaryKey().notNull(),
+  name: text().notNull().unique(),
+  description: text(),
+  isSystem: boolean("is_system").default(false).notNull(),
+  createdAt: timestamp("created_at", { mode: "string" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "string" }).defaultNow().notNull(),
+});
+
+export const rolePermission = pgTable(
+  "role_permission",
+  {
+    id: text().primaryKey().notNull(),
+    roleId: text("role_id").notNull(),
+    permission: permissionEnum().notNull(),
+    createdAt: timestamp("created_at", { mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.roleId],
+      foreignColumns: [role.id],
+      name: "role_permission_role_id_fk",
+    }).onDelete("cascade"),
+    unique("role_permission_unique").on(table.roleId, table.permission),
   ],
 );
