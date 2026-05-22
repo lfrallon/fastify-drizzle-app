@@ -54,7 +54,10 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async function ({ headers, query }, reply) {
-      const permissionResult = await accessPermissionCheck(headers, "Read");
+      const permissionResult = await accessPermissionCheck(
+        headers,
+        "todos:read",
+      );
       if (!permissionResult.currentUser || !permissionResult.currentUser) {
         return reply.status(permissionResult.statusCode).send({
           error: permissionResult.error,
@@ -181,7 +184,10 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async ({ body, headers }, reply) => {
-      const permissionResult = await accessPermissionCheck(headers, "Create");
+      const permissionResult = await accessPermissionCheck(
+        headers,
+        "todos:create",
+      );
       if (!permissionResult.currentUser || !permissionResult.currentUser) {
         return reply.status(permissionResult.statusCode).send({
           error: permissionResult.error,
@@ -203,7 +209,9 @@ export default async function (fastify: TypedFastifyInstance) {
           .values({ title, userId: permissionResult.session.user.id })
           .returning();
 
-        await fastify.cache.delByPrefix(`todos:|userId:${permissionResult.session.user.id}|`);
+        await fastify.cache.delByPrefix(
+          `todos:|userId:${permissionResult.session.user.id}|`,
+        );
 
         return reply.send(addedTodo[0]);
       } catch (error) {
@@ -230,7 +238,10 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async ({ body, headers }, reply) => {
-      const permissionResult = await accessPermissionCheck(headers, "Delete");
+      const permissionResult = await accessPermissionCheck(
+        headers,
+        "todos:delete",
+      );
       if (!permissionResult.currentUser || !permissionResult.currentUser) {
         return reply.status(permissionResult.statusCode).send({
           error: permissionResult.error,
@@ -261,7 +272,9 @@ export default async function (fastify: TypedFastifyInstance) {
           return reply.code(404).send({ error: "Request not completed." });
         }
 
-        await fastify.cache.delByPrefix(`todos:|userId:${permissionResult.session.user.id}|`);
+        await fastify.cache.delByPrefix(
+          `todos:|userId:${permissionResult.session.user.id}|`,
+        );
 
         return reply.send({
           message: `${deletedTodos.length} item/s deleted successfully`,
@@ -309,7 +322,10 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async ({ body, headers }, reply) => {
-      const permissionResult = await accessPermissionCheck(headers, "Update");
+      const permissionResult = await accessPermissionCheck(
+        headers,
+        "todos:update",
+      );
       if (!permissionResult.currentUser || !permissionResult.currentUser) {
         return reply.status(permissionResult.statusCode).send({
           error: permissionResult.error,
@@ -362,7 +378,9 @@ export default async function (fastify: TypedFastifyInstance) {
           });
         }
 
-        await fastify.cache.delByPrefix(`todos:|userId:${permissionResult.session.user.id}|`);
+        await fastify.cache.delByPrefix(
+          `todos:|userId:${permissionResult.session.user.id}|`,
+        );
 
         return reply.send({
           message: `${updatedTodos.length} item/s updated successfully`,

@@ -1,9 +1,7 @@
-import { fromNodeHeaders } from "better-auth/node";
-import { eq, or, and, desc, lt, gt, asc, gte, lte, inArray } from "drizzle-orm";
+import { eq, or, and, desc, lt, gt, asc, gte, lte } from "drizzle-orm";
 import z from "zod";
 
 // lib
-import auth from "#/lib/auth.ts";
 import {
   buildMapMessagesCacheKey,
   parseBboxString,
@@ -101,8 +99,21 @@ export default async function (fastify: TypedFastifyInstance) {
           ),
       },
     },
-    async ({ query }, reply) => {
+    async ({ query, headers }, reply) => {
       try {
+        const permissionResult = await accessPermissionCheck(
+          headers,
+          "map-messages:read",
+        );
+        if (!permissionResult.currentUser || !permissionResult.currentUser) {
+          return reply.status(permissionResult.statusCode).send({
+            error: permissionResult.error,
+            ...(permissionResult.message
+              ? { message: permissionResult.message }
+              : {}),
+          });
+        }
+
         const {
           orderBy,
           pageSize,
@@ -291,9 +302,20 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async ({ body, headers }, reply) => {
-      const session = await auth.api.getSession({
-        headers: fromNodeHeaders(headers),
-      });
+      const permissionResult = await accessPermissionCheck(
+        headers,
+        "map-messages:create",
+      );
+      console.log("🚀 ~ permissionResult:", permissionResult);
+
+      if (!permissionResult.currentUser || !permissionResult.currentUser) {
+        return reply.status(permissionResult.statusCode).send({
+          error: permissionResult.error,
+          ...(permissionResult.message
+            ? { message: permissionResult.message }
+            : {}),
+        });
+      }
 
       const { title, mapMessage, latitude, longitude, videoUrl } = body;
 
@@ -319,7 +341,7 @@ export default async function (fastify: TypedFastifyInstance) {
             mapMessage,
             latitude,
             longitude,
-            userId: session?.user?.id,
+            userId: permissionResult.session.user.id,
             videoUrl,
           })
           .returning();
@@ -394,7 +416,10 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async ({ body, headers }, reply) => {
-      const permissionResult = await accessPermissionCheck(headers, "Delete");
+      const permissionResult = await accessPermissionCheck(
+        headers,
+        "map-messages:delete",
+      );
       if (!permissionResult.currentUser || !permissionResult.currentUser) {
         return reply.status(permissionResult.statusCode).send({
           error: permissionResult.error,
@@ -404,12 +429,6 @@ export default async function (fastify: TypedFastifyInstance) {
         });
       }
 
-      if (permissionResult.currentUser.role !== "Admin") {
-        return reply
-          .status(401)
-          .send({ error: "Request cannot be fullfiled." });
-      }
-
       try {
         const { data } = body;
 
@@ -417,12 +436,39 @@ export default async function (fastify: TypedFastifyInstance) {
           return reply.code(400).send({ error: "No data provided." });
         }
 
-        const ids = data.map((item) => item.id);
+        const deletedMapMessages = [];
 
-        const deletedMapMessages = await db
-          .delete(mapMessages)
-          .where(inArray(mapMessages.id, ids))
-          .returning();
+        for (const item of data) {
+          const { id } = item;
+
+          const whereConditions =
+            permissionResult.currentUser.role === "Admin"
+              ? eq(mapMessages.id, id)
+              : and(
+                  eq(mapMessages.id, id),
+                  eq(mapMessages.userId, permissionResult.session.user.id),
+                );
+
+          const existingMapMessages = await db
+            .select()
+            .from(mapMessages)
+            .where(whereConditions)
+            .limit(1)
+            .then((rows) => rows[0] || undefined);
+
+          if (!existingMapMessages) {
+            continue;
+          }
+
+          const deletedMapMessage = await db
+            .delete(mapMessages)
+            .where(whereConditions)
+            .returning();
+
+          if (deletedMapMessage.length > 0) {
+            deletedMapMessages.push(deletedMapMessage[0]);
+          }
+        }
 
         if (deletedMapMessages.length === 0) {
           return reply.code(404).send({ error: "Request not completed." });
@@ -592,7 +638,10 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async ({ body, headers }, reply) => {
-      const permissionResult = await accessPermissionCheck(headers, "Update");
+      const permissionResult = await accessPermissionCheck(
+        headers,
+        "map-messages:update",
+      );
       if (!permissionResult.currentUser || !permissionResult.currentUser) {
         return reply.status(permissionResult.statusCode).send({
           error: permissionResult.error,
@@ -600,12 +649,6 @@ export default async function (fastify: TypedFastifyInstance) {
             ? { message: permissionResult.message }
             : {}),
         });
-      }
-
-      if (!permissionResult.currentUser.permissions.includes("Update")) {
-        return reply
-          .status(401)
-          .send({ error: "Request cannot be fullfiled." });
       }
 
       try {

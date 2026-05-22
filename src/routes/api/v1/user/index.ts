@@ -35,8 +35,6 @@ const UpdateResponseSchema = {
     email: z.email(),
     image: z.string().nullable(),
     emailVerified: z.boolean(),
-    role: z.string(),
-    permissions: z.string().array(),
     createdAt: z.string().meta({
       description: "User creation date",
       example: "2024-01-01T00:00:00.000Z",
