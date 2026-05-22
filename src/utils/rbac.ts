@@ -71,16 +71,27 @@ async function getUserAccess(userId: string) {
     };
   }
 
-  const roleRecord = await db.query.role.findFirst({
-    where: eq(role.id, userRecord.roleId),
-    columns: {
-      name: true,
-    },
-  });
+  const roleRecord = userRecord.roleId
+    ? await db.query.role.findFirst({
+        where: eq(role.id, userRecord.roleId),
+        columns: {
+          name: true,
+        },
+      })
+    : null;
+
+  const permissions = userRecord.roleId
+    ? await db.query.rolePermission.findMany({
+        where: eq(rolePermission.roleId, userRecord.roleId),
+        columns: {
+          permission: true,
+        },
+      })
+    : [];
 
   return {
     role: roleRecord?.name || "Guest",
-    permissions: [] as Permission[],
+    permissions: permissions.map((p) => p.permission as Permission),
   };
 }
 
@@ -120,24 +131,21 @@ export async function accessPermissionCheck(
   const userRole = userAccess.role;
   const customPermissions = userAccess.permissions;
 
+  const inheritedPermissions = await getRolePermissions(userRole);
+  const allPermissions = [...new Set([...inheritedPermissions, ...customPermissions])];
+
   if (userRole === "Admin") {
     return {
       session,
       currentUser: {
         ...user,
         role: userRole,
-        permissions: customPermissions,
+        permissions: allPermissions,
       },
     };
   }
 
-  const inheritedPermissions = await getRolePermissions(userRole);
-  const allPermissions = new Set([
-    ...inheritedPermissions,
-    ...customPermissions,
-  ]);
-
-  if (!allPermissions.has(requiredPermission)) {
+  if (!new Set(allPermissions).has(requiredPermission)) {
     return {
       error: "Forbidden",
       message: `Missing permission: ${requiredPermission}`,

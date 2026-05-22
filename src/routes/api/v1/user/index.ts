@@ -49,6 +49,13 @@ const UpdateResponseSchema = {
       example: "Unauthorized",
     }),
   }),
+  403: z.object({
+    error: z.string().meta({
+      description: "Forbidden error message",
+      example: "Forbidden",
+    }),
+    message: z.string().optional(),
+  }),
   500: z.object({
     error: z.string().meta({
       description: "Internal Server Error message",
@@ -67,7 +74,9 @@ export default async function (fastify: TypedFastifyInstance) {
         "user:read",
       );
       if (!permissionResult.currentUser || !permissionResult.session) {
-        return reply.status(permissionResult.statusCode).send({
+        const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
+
+        return reply.status(statusCode).send({
           error: permissionResult.error,
           ...(permissionResult.message
             ? { message: permissionResult.message }
@@ -97,7 +106,9 @@ export default async function (fastify: TypedFastifyInstance) {
         "user:update",
       );
       if (!permissionResult.currentUser || !permissionResult.session) {
-        return reply.status(permissionResult.statusCode).send({
+        const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
+
+        return reply.status(statusCode).send({
           error: permissionResult.error,
           ...(permissionResult.message
             ? { message: permissionResult.message }
