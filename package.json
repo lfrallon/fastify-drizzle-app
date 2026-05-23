@@ -7,7 +7,7 @@
     "build": "tsdown",
     "start": "node dist/index.mjs",
     "dev": "cross-env NODE_ENV=development tsx watch src/index.ts",
-    "dev:docker": "npm run dev",
+    "dev:docker": "pnpm run dev",
     "format": "prettier --write \"src/**/*.ts\"",
     "auth:generate": "npx @better-auth/cli@latest generate",
     "db:generate": "drizzle-kit generate",
@@ -29,6 +29,7 @@
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",
     "fastify": "^5.7.4",
+    "fastify-plugin": "^5.1.0",
     "fastify-zod-openapi": "^5.5.0",
     "ioredis": "^5.10.1",
     "pg": "^8.17.2",
@@ -50,6 +51,8 @@
     "typescript": "^6.0.2"
   },
   "imports": {
-    "#/*": "./dist/*"
-  }
+    "#plugins/*": "./dist/plugins/*",
+    "#routes/*": "./dist/routes/*"
+  },
+  "packageManager": "pnpm@11.1.3"
 }

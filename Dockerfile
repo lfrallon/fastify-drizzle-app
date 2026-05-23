@@ -1,140 +1,120 @@
 # ========================================
 # Optimized Multi-Stage Dockerfile
-# Node.js TypeScript Application
+# Fastify + TypeScript + pnpm
 # ========================================
 
 ARG NODE_VERSION=24.11.1-alpine
+
+# ========================================
+# Base Stage
+# ========================================
 FROM node:${NODE_VERSION} AS base
 
-# Set working directory
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+
 WORKDIR /app
 
-# Create non-root user for security
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001 -G nodejs && \
-    chown -R nodejs:nodejs /app
+# Enable pnpm via Corepack
+RUN corepack enable
+
+# Create non-root user
+RUN addgroup -S nodejs -g 1001 && \
+    adduser -S nodejs -u 1001 -G nodejs
 
 # ========================================
 # Dependencies Stage
 # ========================================
 FROM base AS deps
 
-# Copy package files
-COPY package*.json ./
+# Copy dependency manifests
+COPY package.json pnpm-lock.yaml ./
 
-# Install production dependencies
-RUN --mount=type=cache,target=/root/.npm,sharing=locked \
-    npm ci --omit=dev && \
-    npm cache clean --force
+# Non-interactively allow esbuild to run its postinstall binary download 
+# (Injects configurations compatible across pnpm v9, v10, and v11)
+RUN node -e " \
+    const fs = require('fs'); \
+    const pkg = JSON.parse(fs.readFileSync('package.json')); \
+    pkg.pnpm = { ...pkg.pnpm, onlyBuiltDependencies: ['esbuild'] }; \
+    fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2)); \
+    fs.writeFileSync('pnpm-workspace.yaml', 'packages:\n  - \'.\'\nallowBuilds:\n  esbuild: true\nonlyBuiltDependencies:\n  - esbuild\n'); \
+    "
 
-# Set proper ownership
-RUN chown -R nodejs:nodejs /app
+# Install production dependencies only
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install \
+    --prod \
+    --frozen-lockfile
 
 # ========================================
 # Build Dependencies Stage
 # ========================================
 FROM base AS build-deps
 
-# Copy package files
-COPY package*.json ./
+COPY package.json pnpm-lock.yaml ./
 
-# Install all dependencies with build optimizations
-RUN --mount=type=cache,target=/root/.npm,sharing=locked \
-    npm ci --no-audit --no-fund && \
-    npm cache clean --force
+# Non-interactively allow esbuild to run its postinstall binary download 
+RUN node -e " \
+    const fs = require('fs'); \
+    const pkg = JSON.parse(fs.readFileSync('package.json')); \
+    pkg.pnpm = { ...pkg.pnpm, onlyBuiltDependencies: ['esbuild'] }; \
+    fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2)); \
+    fs.writeFileSync('pnpm-workspace.yaml', 'packages:\n  - \'.\'\nallowBuilds:\n  esbuild: true\nonlyBuiltDependencies:\n  - esbuild\n'); \
+    "
 
-# Create necessary directories and set permissions
-RUN mkdir -p /app/node_modules && \
-    chown -R nodejs:nodejs /app
+# Install all dependencies
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile
 
 # ========================================
 # Build Stage
 # ========================================
 FROM build-deps AS build
 
-# Copy only necessary files for building (respects .dockerignore)
-COPY --chown=nodejs:nodejs . .
+# Copy source code
+COPY . .
 
-# Build the application
-RUN npm run build
-
-# Set proper ownership
-RUN chown -R nodejs:nodejs /app
+# Build application
+RUN pnpm run build
 
 # ========================================
 # Development Stage
 # ========================================
 FROM build-deps AS development
 
-# Set environment
-ENV NODE_ENV=development \
-    NPM_CONFIG_LOGLEVEL=warn
+ENV NODE_ENV=development
 
-# Copy source files
 COPY . .
 
-# Ensure all directories have proper permissions
-RUN mkdir -p /app/node_modules && \
-    chown -R nodejs:nodejs /app && \
-    chmod -R 755 /app
-
-# Switch to non-root user
 USER nodejs
 
-# Expose ports
 EXPOSE 3006
 
-# Start development server
-CMD ["npm", "run", "dev:docker"]
+CMD ["pnpm", "run", "dev:docker"]
 
 # ========================================
 # Production Stage
 # ========================================
-ARG NODE_VERSION=24.11.1-alpine
-FROM node:${NODE_VERSION} AS production
+# OPTIMIZATION: Inherit from base to inherit working dir, users, and corepack setup
+FROM base AS production
 
-# Set working directory
-WORKDIR /app
+ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=256 --enable-source-maps"
 
-# Create non-root user for security
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001 -G nodejs && \
-    chown -R nodejs:nodejs /app
+# Copy production node_modules
+COPY --from=deps /app/node_modules ./node_modules
 
-# Set optimized environment variables
-ENV NODE_ENV=production \
-    NODE_OPTIONS="--max-old-space-size=256 --no-warnings" \
-    NPM_CONFIG_LOGLEVEL=silent
+# Copy package manifest
+COPY --from=build /app/package.json ./
 
-# Copy production dependencies from deps stage
-COPY --from=deps --chown=nodejs:nodejs /app/node_modules ./node_modules
-COPY --from=deps --chown=nodejs:nodejs /app/package*.json ./
-# Copy built application from build stage
-COPY --from=build --chown=nodejs:nodejs /app/dist ./dist
+# Copy compiled output
+COPY --from=build /app/dist ./dist
 
-# Switch to non-root user for security
+# Ownership
+RUN chown -R nodejs:nodejs /app
+
 USER nodejs
 
-# Expose port
 EXPOSE 3006
 
-# Start production server
 CMD ["node", "dist/index.mjs"]
-
-# ========================================
-# Test Stage
-# ========================================
-# FROM build-deps AS test
-
-# # Set environment
-# ENV NODE_ENV=test \
-#     CI=true
-
-# # Copy source files
-# COPY --chown=nodejs:nodejs . .
-
-# # Switch to non-root user
-# USER nodejs
-
-# # Run tests with coverage
-# CMD ["npm", "run", "test:coverage"]
