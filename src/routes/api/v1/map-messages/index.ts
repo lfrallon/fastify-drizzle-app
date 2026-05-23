@@ -99,21 +99,8 @@ export default async function (fastify: TypedFastifyInstance) {
           ),
       },
     },
-    async ({ query, headers }, reply) => {
+    async ({ query }, reply) => {
       try {
-        const permissionResult = await accessPermissionCheck(
-          headers,
-          "map-messages:read",
-        );
-        if (!permissionResult.currentUser || !permissionResult.session) {
-          return reply.status(permissionResult.statusCode).send({
-            error: permissionResult.error,
-            ...(permissionResult.message
-              ? { message: permissionResult.message }
-              : {}),
-          });
-        }
-
         const {
           orderBy,
           pageSize,
@@ -306,16 +293,6 @@ export default async function (fastify: TypedFastifyInstance) {
         headers,
         "map-messages:create",
       );
-      console.log("🚀 ~ permissionResult:", permissionResult);
-
-      if (!permissionResult.currentUser || !permissionResult.session) {
-        return reply.status(permissionResult.statusCode).send({
-          error: permissionResult.error,
-          ...(permissionResult.message
-            ? { message: permissionResult.message }
-            : {}),
-        });
-      }
 
       const { title, mapMessage, latitude, longitude, videoUrl } = body;
 
@@ -341,7 +318,7 @@ export default async function (fastify: TypedFastifyInstance) {
             mapMessage,
             latitude,
             longitude,
-            userId: permissionResult.session.user.id,
+            userId: permissionResult ? permissionResult.session?.user.id : null,
             videoUrl,
           })
           .returning();

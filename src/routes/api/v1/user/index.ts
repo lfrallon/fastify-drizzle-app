@@ -66,7 +66,7 @@ const UpdateResponseSchema = {
 
 const AccessResponseSchema = {
   200: z.object({
-    id: z.string(),
+    id: z.string().nullable(),
     role: z.string().nullable(),
     permissions: z.array(z.string()),
   }),
@@ -176,13 +176,10 @@ export default async function (fastify: TypedFastifyInstance) {
         "user:read",
       );
       if (!permissionResult.currentUser || !permissionResult.session) {
-        const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
-
-        return reply.status(statusCode).send({
-          error: permissionResult.error,
-          ...(permissionResult.message
-            ? { message: permissionResult.message }
-            : {}),
+        return reply.status(200).send({
+          id: null,
+          role: null,
+          permissions: [],
         });
       }
 
