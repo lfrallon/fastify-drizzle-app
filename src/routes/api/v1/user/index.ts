@@ -11,9 +11,10 @@ import type { TypedFastifyInstance } from "#/types/index.ts";
 
 // auth lib
 import { accessPermissionCheck } from "#/utils/rbac.ts";
+import type { Permission } from "#/utils/rbac.ts";
 
 // libs
-import { buildTodosCacheKey } from "#/lib/todos/index.ts";
+import { buildUserAccountsCacheKey } from "#/lib/user/index.ts";
 
 // db
 import { db } from "#/db/index.ts";
@@ -30,6 +31,12 @@ type UserSelect = {
   updatedAt: string;
   roleId: string | null;
 };
+
+interface UserAccountsNodes {
+  user: UserSelect;
+  role: string | null;
+  permissions: Permission[];
+}
 
 const PutBodySchema = z.object({
   firstName: z
@@ -210,7 +217,7 @@ export default async function (fastify: TypedFastifyInstance) {
             : undefined;
         const queryLimit = clampedPageSize + 1;
 
-        const cacheKey = buildTodosCacheKey({
+        const cacheKey = buildUserAccountsCacheKey({
           userId: permissionResult.session.user.id,
           clampedPageSize,
           orderBy,
@@ -239,7 +246,7 @@ export default async function (fastify: TypedFastifyInstance) {
               .select()
               .from(user)
               .leftJoin(role, eq(user.roleId, role.id))
-              .leftJoin(rolePermission, eq(user.roleId, role.id))
+              .leftJoin(rolePermission, eq(rolePermission.roleId, role.id))
               .where(
                 cursor
                   ? or(
@@ -259,12 +266,7 @@ export default async function (fastify: TypedFastifyInstance) {
                 orderBy === "desc" ? desc(user.id) : asc(user.id),
               );
 
-            const map = new Map<
-              string,
-              { user: UserSelect; role: string | null; permissions: string[] }
-            >();
-
-            console.log("🚀 ~ usersCached:", usersCached);
+            const map = new Map<string, UserAccountsNodes>();
 
             for (const row of usersCached) {
               const uid = row.user.id;
@@ -285,11 +287,7 @@ export default async function (fastify: TypedFastifyInstance) {
             }
 
             // preserve original ordering from usersCached
-            const ordered = [] as {
-              user: UserSelect;
-              role: string | null;
-              permissions: string[];
-            }[];
+            const ordered: UserAccountsNodes[] = [];
             const seen = new Set<string>();
             for (const row of usersCached) {
               const uid = row.user.id;
@@ -317,8 +315,6 @@ export default async function (fastify: TypedFastifyInstance) {
                   currentPageItems[currentPageItems.length - 1].user.updatedAt,
               }
             : null;
-        console.log("🚀 ~ currentPageItems:", currentPageItems);
-
         return reply.code(200).send({
           nodes: currentPageItems,
           pageInfo: {
