@@ -15,6 +15,8 @@ import type { Permission } from "#/utils/rbac.ts";
 
 // libs
 import { buildUserAccountsCacheKey } from "#/lib/user/index.ts";
+import { buildUserPermissionsCacheKey } from "#/lib/permissions/index.ts";
+import { buildUserRolesCacheKey } from "#/lib/roles/index.ts";
 
 // db
 import { db } from "#/db/index.ts";
@@ -35,6 +37,17 @@ type UserSelect = {
 interface UserAccountsNodes {
   user: UserSelect;
   role: string | null;
+  permissions: Permission[];
+}
+
+interface UserRolesNodes {
+  id: string;
+  name: string;
+  description: string | null;
+  isSystem: boolean;
+  createdAt: string;
+  updatedAt: string;
+  users: UserSelect[];
   permissions: Permission[];
 }
 
@@ -117,9 +130,9 @@ export default async function (fastify: TypedFastifyInstance) {
   // GET /api/v1/user
   fastify
     .withTypeProvider<FastifyZodOpenApiTypeProvider>()
-    .get("", async function (request: FastifyRequest, reply: FastifyReply) {
+    .get("", async function ({ headers }, reply) {
       const permissionResult = await accessPermissionCheck(
-        request.headers,
+        headers,
         "user:read",
       );
       if (!permissionResult.currentUser || !permissionResult.session) {
@@ -400,6 +413,372 @@ export default async function (fastify: TypedFastifyInstance) {
           id: permissionResult.session.user.roleId,
           role: permissionResult.currentUser.role,
           permissions: permissionResult.currentUser.permissions,
+        });
+      } catch (error) {
+        return reply.code(500).send({ error: "Internal Server Error" });
+      }
+    },
+  );
+
+  // GET /api/v1/user/permissions
+  fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().get(
+    "/permissions",
+    {
+      schema: {
+        querystring: z
+          .object({
+            id: z.string().optional().meta({
+              description: "The id of the last item from the previous page",
+              example: "",
+            }),
+            updatedAt: z.string().optional().meta({
+              description: "The date of the last item from the previous page",
+              example: "",
+            }),
+            pageSize: z.coerce.number().default(10).meta({
+              description: "Number of items to return per page",
+              example: 10,
+            }),
+            orderBy: z.enum(["asc", "desc"]).default("desc").meta({
+              description: "Order of the items",
+              example: "desc",
+            }),
+            limit: z.coerce.number().optional().meta({
+              description:
+                "Optional alias for pageSize, clamped by the API for safety",
+              example: 200,
+            }),
+          })
+          .refine((data) => !(data.id && !data.updatedAt), {
+            message: "'id' is required.",
+            path: ["id"],
+          })
+          .refine((data) => !(data.updatedAt && !data.id), {
+            message: "'updatedAt' is required.",
+            path: ["updatedAt"],
+          }),
+      },
+    },
+    async function ({ headers, query }, reply) {
+      const permissionResult = await accessPermissionCheck(
+        headers,
+        "user:read",
+      );
+      if (!permissionResult.currentUser || !permissionResult.session) {
+        const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
+
+        return reply.status(statusCode).send({
+          error: permissionResult.error,
+          ...(permissionResult.message
+            ? { message: permissionResult.message }
+            : {}),
+        });
+      }
+
+      if (permissionResult.currentUser.role !== "Admin") {
+        return reply.status(403).send({
+          error: "Forbidden",
+          message: "You do not have permission to access this resource.",
+        });
+      }
+
+      try {
+        const { updatedAt, id, pageSize, orderBy, limit } = query;
+
+        const rawRequestedLimit = limit ?? pageSize;
+        const clampedPageSize = Math.min(Math.max(rawRequestedLimit, 1), 200);
+
+        const cursor =
+          updatedAt && id
+            ? {
+                id,
+                updatedAt,
+              }
+            : undefined;
+        const queryLimit = clampedPageSize + 1;
+
+        const cacheKey = buildUserPermissionsCacheKey({
+          userId: permissionResult.session.user.id,
+          clampedPageSize,
+          orderBy,
+          cursor,
+        });
+
+        const totalCount = await db.$count(rolePermission);
+
+        if (totalCount === 0) {
+          return reply.code(200).send({
+            nodes: [],
+            pageInfo: {
+              hasNextPage: false,
+              nextCursor: null,
+              totalPages: 0,
+            },
+            totalCount,
+          });
+        }
+
+        const getPaginatedUsers = await fastify.cache.wrap(
+          cacheKey,
+          300,
+          async () => {
+            const rolePermissionCached = await db
+              .select({
+                id: rolePermission.id,
+                roleId: rolePermission.roleId,
+                permission: rolePermission.permission,
+                createdAt: rolePermission.createdAt,
+                role: {
+                  id: role.id,
+                  name: role.name,
+                  description: role.description,
+                  isSystem: role.isSystem,
+                  createdAt: role.createdAt,
+                  updatedAt: role.updatedAt,
+                },
+              })
+              .from(rolePermission)
+              .leftJoin(role, eq(rolePermission.roleId, role.id))
+              .where(
+                cursor
+                  ? or(
+                      orderBy === "desc"
+                        ? lt(rolePermission.createdAt, cursor.updatedAt)
+                        : gt(rolePermission.createdAt, cursor.updatedAt),
+                      and(
+                        eq(rolePermission.createdAt, cursor.updatedAt),
+                        lt(rolePermission.id, cursor.id),
+                      ),
+                    )
+                  : undefined,
+              )
+              .limit(queryLimit)
+              .orderBy(
+                orderBy === "desc"
+                  ? desc(rolePermission.createdAt)
+                  : asc(rolePermission.createdAt),
+                orderBy === "desc"
+                  ? desc(rolePermission.id)
+                  : asc(rolePermission.id),
+              );
+
+            return rolePermissionCached;
+          },
+        );
+
+        const hasNextPage = getPaginatedUsers.length > clampedPageSize;
+
+        const currentPageItems = hasNextPage
+          ? getPaginatedUsers.slice(0, clampedPageSize)
+          : getPaginatedUsers;
+
+        const newNextCursor =
+          currentPageItems.length > 0
+            ? {
+                id: currentPageItems[currentPageItems.length - 1].id,
+                updatedAt:
+                  currentPageItems[currentPageItems.length - 1].createdAt,
+              }
+            : null;
+        return reply.code(200).send({
+          nodes: currentPageItems,
+          pageInfo: {
+            hasNextPage,
+            nextCursor: newNextCursor,
+            totalPages: Math.ceil(totalCount / clampedPageSize),
+          },
+          totalCount,
+        });
+      } catch (error) {
+        return reply.code(500).send({ error: "Internal Server Error" });
+      }
+    },
+  );
+
+  // GET /api/v1/user/roles
+  fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().get(
+    "/roles",
+    {
+      schema: {
+        querystring: z
+          .object({
+            id: z.string().optional().meta({
+              description: "The id of the last item from the previous page",
+              example: "",
+            }),
+            updatedAt: z.string().optional().meta({
+              description: "The date of the last item from the previous page",
+              example: "",
+            }),
+            pageSize: z.coerce.number().default(10).meta({
+              description: "Number of items to return per page",
+              example: 10,
+            }),
+            orderBy: z.enum(["asc", "desc"]).default("desc").meta({
+              description: "Order of the items",
+              example: "desc",
+            }),
+            limit: z.coerce.number().optional().meta({
+              description:
+                "Optional alias for pageSize, clamped by the API for safety",
+              example: 200,
+            }),
+          })
+          .refine((data) => !(data.id && !data.updatedAt), {
+            message: "'id' is required.",
+            path: ["id"],
+          })
+          .refine((data) => !(data.updatedAt && !data.id), {
+            message: "'updatedAt' is required.",
+            path: ["updatedAt"],
+          }),
+      },
+    },
+    async function ({ headers, query }, reply) {
+      const permissionResult = await accessPermissionCheck(
+        headers,
+        "user:read",
+      );
+      if (!permissionResult.currentUser || !permissionResult.session) {
+        const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
+
+        return reply.status(statusCode).send({
+          error: permissionResult.error,
+          ...(permissionResult.message
+            ? { message: permissionResult.message }
+            : {}),
+        });
+      }
+
+      if (permissionResult.currentUser.role !== "Admin") {
+        return reply.status(403).send({
+          error: "Forbidden",
+          message: "You do not have permission to access this resource.",
+        });
+      }
+
+      try {
+        const { updatedAt, id, pageSize, orderBy, limit } = query;
+
+        const rawRequestedLimit = limit ?? pageSize;
+        const clampedPageSize = Math.min(Math.max(rawRequestedLimit, 1), 200);
+
+        const cursor =
+          updatedAt && id
+            ? {
+                id,
+                updatedAt,
+              }
+            : undefined;
+        const queryLimit = clampedPageSize + 1;
+
+        const cacheKey = buildUserRolesCacheKey({
+          userId: permissionResult.session.user.id,
+          clampedPageSize,
+          orderBy,
+          cursor,
+        });
+
+        const totalCount = await db.$count(user);
+
+        if (totalCount === 0) {
+          return reply.code(200).send({
+            nodes: [],
+            pageInfo: {
+              hasNextPage: false,
+              nextCursor: null,
+              totalPages: 0,
+            },
+            totalCount,
+          });
+        }
+
+        const getPaginatedUsers = await fastify.cache.wrap(
+          cacheKey,
+          300,
+          async () => {
+            const rolesCached = await db
+              .select()
+              .from(role)
+              .leftJoin(user, eq(user.roleId, role.id))
+              .leftJoin(rolePermission, eq(rolePermission.roleId, role.id))
+              .where(
+                cursor
+                  ? or(
+                      orderBy === "desc"
+                        ? lt(user.updatedAt, cursor.updatedAt)
+                        : gt(user.updatedAt, cursor.updatedAt),
+                      and(
+                        eq(user.updatedAt, cursor.updatedAt),
+                        lt(user.id, cursor.id),
+                      ),
+                    )
+                  : undefined,
+              )
+              .limit(queryLimit)
+              .orderBy(
+                orderBy === "desc" ? desc(user.updatedAt) : asc(user.updatedAt),
+                orderBy === "desc" ? desc(user.id) : asc(user.id),
+              );
+
+            const map = new Map<string, UserRolesNodes>();
+
+            for (const row of rolesCached) {
+              const uid = row.role.id;
+              const user = row.user ?? null;
+              const perm = row.role_permission?.permission ?? null;
+
+              if (!map.has(uid)) {
+                map.set(uid, {
+                  ...row.role,
+                  users: user ? [user] : [],
+                  permissions: perm ? [perm] : [],
+                });
+              } else if (perm) {
+                const entry = map.get(uid)!;
+                if (!entry.permissions.includes(perm)) {
+                  entry.permissions.push(perm);
+                }
+              }
+            }
+
+            // preserve original ordering from rolesCached
+            const ordered: UserRolesNodes[] = [];
+            const seen = new Set<string>();
+            for (const row of rolesCached) {
+              const uid = row.role.id;
+              if (!seen.has(uid)) {
+                seen.add(uid);
+                ordered.push(map.get(uid)!);
+              }
+            }
+
+            return ordered;
+          },
+        );
+
+        const hasNextPage = getPaginatedUsers.length > clampedPageSize;
+
+        const currentPageItems = hasNextPage
+          ? getPaginatedUsers.slice(0, clampedPageSize)
+          : getPaginatedUsers;
+
+        const newNextCursor =
+          currentPageItems.length > 0
+            ? {
+                id: currentPageItems[currentPageItems.length - 1].id,
+                updatedAt:
+                  currentPageItems[currentPageItems.length - 1].updatedAt,
+              }
+            : null;
+        return reply.code(200).send({
+          nodes: currentPageItems,
+          pageInfo: {
+            hasNextPage,
+            nextCursor: newNextCursor,
+            totalPages: Math.ceil(totalCount / clampedPageSize),
+          },
+          totalCount,
         });
       } catch (error) {
         return reply.code(500).send({ error: "Internal Server Error" });
