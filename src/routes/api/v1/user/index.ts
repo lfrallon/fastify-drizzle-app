@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, lt, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt, or } from "drizzle-orm";
 import z from "zod";
 
 // types
@@ -99,6 +99,47 @@ const UpdateResponseSchema = {
   }),
 };
 
+
+const PositiveIntParam = z
+  .coerce.number()
+  .int()
+  .finite()
+  .min(1)
+  .max(200);
+
+const CursorPaginationQuerySchema = z
+  .object({
+    id: z.string().optional().meta({
+      description: "The id of the last item from the previous page",
+      example: "",
+    }),
+    updatedAt: z.string().optional().meta({
+      description: "The date of the last item from the previous page",
+      example: "",
+    }),
+    pageSize: PositiveIntParam.default(10).meta({
+      description: "Number of items to return per page",
+      example: 10,
+    }),
+    orderBy: z.enum(["asc", "desc"]).default("desc").meta({
+      description: "Order of the items",
+      example: "desc",
+    }),
+    limit: PositiveIntParam.optional().meta({
+      description: "Optional alias for pageSize, clamped by the API for safety",
+      example: 200,
+    }),
+  })
+  .strict()
+  .refine((data) => !(data.id && !data.updatedAt), {
+    message: "'id' is required.",
+    path: ["id"],
+  })
+  .refine((data) => !(data.updatedAt && !data.id), {
+    message: "'updatedAt' is required.",
+    path: ["updatedAt"],
+  });
+
 const AccessResponseSchema = {
   200: z.object({
     id: z.string().nullable(),
@@ -158,38 +199,7 @@ export default async function (fastify: TypedFastifyInstance) {
     "/accounts",
     {
       schema: {
-        querystring: z
-          .object({
-            id: z.string().optional().meta({
-              description: "The id of the last item from the previous page",
-              example: "",
-            }),
-            updatedAt: z.string().optional().meta({
-              description: "The date of the last item from the previous page",
-              example: "",
-            }),
-            pageSize: z.coerce.number().default(10).meta({
-              description: "Number of items to return per page",
-              example: 10,
-            }),
-            orderBy: z.enum(["asc", "desc"]).default("desc").meta({
-              description: "Order of the items",
-              example: "desc",
-            }),
-            limit: z.coerce.number().optional().meta({
-              description:
-                "Optional alias for pageSize, clamped by the API for safety",
-              example: 200,
-            }),
-          })
-          .refine((data) => !(data.id && !data.updatedAt), {
-            message: "'id' is required.",
-            path: ["id"],
-          })
-          .refine((data) => !(data.updatedAt && !data.id), {
-            message: "'updatedAt' is required.",
-            path: ["updatedAt"],
-          }),
+        querystring: CursorPaginationQuerySchema,
       },
     },
     async function ({ headers, query }, reply) {
@@ -218,8 +228,7 @@ export default async function (fastify: TypedFastifyInstance) {
       try {
         const { updatedAt, id, pageSize, orderBy, limit } = query;
 
-        const rawRequestedLimit = limit ?? pageSize;
-        const clampedPageSize = Math.min(Math.max(rawRequestedLimit, 1), 200);
+        const clampedPageSize = limit ?? pageSize;
 
         const cursor =
           updatedAt && id
@@ -255,11 +264,12 @@ export default async function (fastify: TypedFastifyInstance) {
           cacheKey,
           300,
           async () => {
-            const usersCached = await db
-              .select()
+            const pageUserRows = await db
+              .select({
+                id: user.id,
+                updatedAt: user.updatedAt,
+              })
               .from(user)
-              .leftJoin(role, eq(user.roleId, role.id))
-              .leftJoin(rolePermission, eq(rolePermission.roleId, role.id))
               .where(
                 cursor
                   ? or(
@@ -274,6 +284,21 @@ export default async function (fastify: TypedFastifyInstance) {
                   : undefined,
               )
               .limit(queryLimit)
+              .orderBy(
+                orderBy === "desc" ? desc(user.updatedAt) : asc(user.updatedAt),
+                orderBy === "desc" ? desc(user.id) : asc(user.id),
+              );
+
+            if (pageUserRows.length === 0) return [];
+
+            const pageUserIds = pageUserRows.map((row) => row.id);
+
+            const usersCached = await db
+              .select()
+              .from(user)
+              .leftJoin(role, eq(user.roleId, role.id))
+              .leftJoin(rolePermission, eq(rolePermission.roleId, role.id))
+              .where(inArray(user.id, pageUserIds))
               .orderBy(
                 orderBy === "desc" ? desc(user.updatedAt) : asc(user.updatedAt),
                 orderBy === "desc" ? desc(user.id) : asc(user.id),
@@ -299,14 +324,15 @@ export default async function (fastify: TypedFastifyInstance) {
               }
             }
 
-            // preserve original ordering from usersCached
+            // preserve original ordering from pageUserRows
             const ordered: UserAccountsNodes[] = [];
             const seen = new Set<string>();
-            for (const row of usersCached) {
-              const uid = row.user.id;
+            for (const row of pageUserRows) {
+              const uid = row.id;
               if (!seen.has(uid)) {
                 seen.add(uid);
-                ordered.push(map.get(uid)!);
+                const node = map.get(uid);
+                if (node) ordered.push(node);
               }
             }
 
@@ -425,38 +451,7 @@ export default async function (fastify: TypedFastifyInstance) {
     "/permissions",
     {
       schema: {
-        querystring: z
-          .object({
-            id: z.string().optional().meta({
-              description: "The id of the last item from the previous page",
-              example: "",
-            }),
-            updatedAt: z.string().optional().meta({
-              description: "The date of the last item from the previous page",
-              example: "",
-            }),
-            pageSize: z.coerce.number().default(10).meta({
-              description: "Number of items to return per page",
-              example: 10,
-            }),
-            orderBy: z.enum(["asc", "desc"]).default("desc").meta({
-              description: "Order of the items",
-              example: "desc",
-            }),
-            limit: z.coerce.number().optional().meta({
-              description:
-                "Optional alias for pageSize, clamped by the API for safety",
-              example: 200,
-            }),
-          })
-          .refine((data) => !(data.id && !data.updatedAt), {
-            message: "'id' is required.",
-            path: ["id"],
-          })
-          .refine((data) => !(data.updatedAt && !data.id), {
-            message: "'updatedAt' is required.",
-            path: ["updatedAt"],
-          }),
+        querystring: CursorPaginationQuerySchema,
       },
     },
     async function ({ headers, query }, reply) {
@@ -485,8 +480,7 @@ export default async function (fastify: TypedFastifyInstance) {
       try {
         const { updatedAt, id, pageSize, orderBy, limit } = query;
 
-        const rawRequestedLimit = limit ?? pageSize;
-        const clampedPageSize = Math.min(Math.max(rawRequestedLimit, 1), 200);
+        const clampedPageSize = limit ?? pageSize;
 
         const cursor =
           updatedAt && id
@@ -600,38 +594,7 @@ export default async function (fastify: TypedFastifyInstance) {
     "/roles",
     {
       schema: {
-        querystring: z
-          .object({
-            id: z.string().optional().meta({
-              description: "The id of the last item from the previous page",
-              example: "",
-            }),
-            updatedAt: z.string().optional().meta({
-              description: "The date of the last item from the previous page",
-              example: "",
-            }),
-            pageSize: z.coerce.number().default(10).meta({
-              description: "Number of items to return per page",
-              example: 10,
-            }),
-            orderBy: z.enum(["asc", "desc"]).default("desc").meta({
-              description: "Order of the items",
-              example: "desc",
-            }),
-            limit: z.coerce.number().optional().meta({
-              description:
-                "Optional alias for pageSize, clamped by the API for safety",
-              example: 200,
-            }),
-          })
-          .refine((data) => !(data.id && !data.updatedAt), {
-            message: "'id' is required.",
-            path: ["id"],
-          })
-          .refine((data) => !(data.updatedAt && !data.id), {
-            message: "'updatedAt' is required.",
-            path: ["updatedAt"],
-          }),
+        querystring: CursorPaginationQuerySchema,
       },
     },
     async function ({ headers, query }, reply) {
@@ -660,8 +623,7 @@ export default async function (fastify: TypedFastifyInstance) {
       try {
         const { updatedAt, id, pageSize, orderBy, limit } = query;
 
-        const rawRequestedLimit = limit ?? pageSize;
-        const clampedPageSize = Math.min(Math.max(rawRequestedLimit, 1), 200);
+        const clampedPageSize = limit ?? pageSize;
 
         const cursor =
           updatedAt && id
@@ -697,11 +659,12 @@ export default async function (fastify: TypedFastifyInstance) {
           cacheKey,
           300,
           async () => {
-            const rolesCached = await db
-              .select()
-              .from(role)
-              .leftJoin(user, eq(user.roleId, role.id))
-              .leftJoin(rolePermission, eq(rolePermission.roleId, role.id))
+            const pageUserRows = await db
+              .select({
+                id: user.id,
+                updatedAt: user.updatedAt,
+              })
+              .from(user)
               .where(
                 cursor
                   ? or(
@@ -716,6 +679,20 @@ export default async function (fastify: TypedFastifyInstance) {
                   : undefined,
               )
               .limit(queryLimit)
+              .orderBy(
+                orderBy === "desc" ? desc(user.updatedAt) : asc(user.updatedAt),
+                orderBy === "desc" ? desc(user.id) : asc(user.id),
+              );
+
+            if (pageUserRows.length === 0) return [];
+            const pageUserIds = pageUserRows.map((row) => row.id);
+
+            const rolesCached = await db
+              .select()
+              .from(role)
+              .leftJoin(user, eq(user.roleId, role.id))
+              .leftJoin(rolePermission, eq(rolePermission.roleId, role.id))
+              .where(inArray(user.id, pageUserIds))
               .orderBy(
                 orderBy === "desc" ? desc(user.updatedAt) : asc(user.updatedAt),
                 orderBy === "desc" ? desc(user.id) : asc(user.id),
@@ -742,14 +719,15 @@ export default async function (fastify: TypedFastifyInstance) {
               }
             }
 
-            // preserve original ordering from rolesCached
+            // preserve original ordering from pageUserRows
             const ordered: UserRolesNodes[] = [];
             const seen = new Set<string>();
-            for (const row of rolesCached) {
-              const uid = row.role.id;
+            for (const row of pageUserRows) {
+              const uid = row.id;
               if (!seen.has(uid)) {
                 seen.add(uid);
-                ordered.push(map.get(uid)!);
+                const node = map.get(uid);
+                if (node) ordered.push(node);
               }
             }
 
