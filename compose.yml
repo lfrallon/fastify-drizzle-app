@@ -30,8 +30,8 @@ services:
       REDIS_PASSWORD: '${REDIS_PASSWORD}'
       ALLOWED_ORIGINS: '${ALLOWED_ORIGINS}'
     volumes:
-      - ./src:/app/src:ro
-      - ./package.json:/app/package.json
+      - ./src:/app/src:ro,Z
+      # - ./package.json:/app/package.json:Z
     depends_on:
       db:
         condition: service_healthy
