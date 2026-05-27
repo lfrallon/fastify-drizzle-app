@@ -14,7 +14,7 @@ services:
       target: development
     container_name: fastify-drizzle-app-dev
     ports:
-      - '${APP_PORT}:3006' # API server
+      - '${APP_PORT:-3006}:3006' # API server
       # - '${DEBUG_PORT}:9229' # Node.js debugger
     environment:
       NODE_ENV: development
@@ -23,14 +23,14 @@ services:
       POSTGRES_PORT: 5432
       POSTGRES_DB: '${POSTGRES_DB:-fastifydb}'
       POSTGRES_USER: '${POSTGRES_USER:-postgres}'
-      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD}'
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD:-postgres}'
       REDIS_HOST: '${REDIS_HOST}'
       REDIS_PORT: '${REDIS_PORT:-6379}'
       REDIS_USERNAME: '${REDIS_USERNAME}'
       REDIS_PASSWORD: '${REDIS_PASSWORD}'
       ALLOWED_ORIGINS: '${ALLOWED_ORIGINS}'
     volumes:
-      - ./src:/app/src:ro,Z
+      - ./src:/app/src:ro
       # - ./package.json:/app/package.json:Z
     depends_on:
       db:
@@ -61,7 +61,7 @@ services:
       target: production
     container_name: fastify-drizzle-app-prod
     ports:
-      - '${PROD_PORT}:3006'
+      - '${PROD_PORT:-3006}:3006'
     environment:
       NODE_ENV: production
       POSTGRES_HOST: db
@@ -101,16 +101,16 @@ services:
     image: postgres:latest
     container_name: fastify-drizzle-db
     environment:
-      POSTGRES_DB: '${POSTGRES_DB}'
-      POSTGRES_USER: '${POSTGRES_USER}'
-      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD}'
+      POSTGRES_DB: '${POSTGRES_DB:-fastifydb}'
+      POSTGRES_USER: '${POSTGRES_USER:-postgres}'
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD:-postgres}'
       TZ: Asia/Manila
       PGTZ: Asia/Manila
       PGDATA: /var/lib/postgresql/data
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - '${DB_PORT}:5432'
+      - '${DB_PORT:-5432}:5432'
     restart: unless-stopped
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
@@ -128,14 +128,12 @@ services:
     image: redis:7-alpine
     container_name: fastify-drizzle-redis
     restart: unless-stopped
-    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
     volumes:
-      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
       - redis_data:/data
     ports:
       - "${REDIS_PORT:-6379}:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "--user", "${REDIS_USERNAME}", "--pass", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
