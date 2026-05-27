@@ -99,13 +99,7 @@ const UpdateResponseSchema = {
   }),
 };
 
-
-const PositiveIntParam = z
-  .coerce.number()
-  .int()
-  .finite()
-  .min(1)
-  .max(200);
+const PositiveIntParam = z.coerce.number().int().min(1).max(200);
 
 const CursorPaginationQuerySchema = z
   .object({
@@ -641,7 +635,7 @@ export default async function (fastify: TypedFastifyInstance) {
           cursor,
         });
 
-        const totalCount = await db.$count(user);
+        const totalCount = await db.$count(role);
 
         if (totalCount === 0) {
           return reply.code(200).send({
@@ -659,43 +653,44 @@ export default async function (fastify: TypedFastifyInstance) {
           cacheKey,
           300,
           async () => {
-            const pageUserRows = await db
+            const pageRoleRows = await db
               .select({
-                id: user.id,
-                updatedAt: user.updatedAt,
+                id: role.id,
+                updatedAt: role.updatedAt,
               })
-              .from(user)
+              .from(role)
               .where(
                 cursor
                   ? or(
                       orderBy === "desc"
-                        ? lt(user.updatedAt, cursor.updatedAt)
-                        : gt(user.updatedAt, cursor.updatedAt),
+                        ? lt(role.updatedAt, cursor.updatedAt)
+                        : gt(role.updatedAt, cursor.updatedAt),
                       and(
-                        eq(user.updatedAt, cursor.updatedAt),
-                        lt(user.id, cursor.id),
+                        eq(role.updatedAt, cursor.updatedAt),
+                        lt(role.id, cursor.id),
                       ),
                     )
                   : undefined,
               )
               .limit(queryLimit)
               .orderBy(
-                orderBy === "desc" ? desc(user.updatedAt) : asc(user.updatedAt),
-                orderBy === "desc" ? desc(user.id) : asc(user.id),
+                orderBy === "desc" ? desc(role.updatedAt) : asc(role.updatedAt),
+                orderBy === "desc" ? desc(role.id) : asc(role.id),
               );
 
-            if (pageUserRows.length === 0) return [];
-            const pageUserIds = pageUserRows.map((row) => row.id);
+            if (pageRoleRows.length === 0) return [];
+
+            const pageRoleIds = pageRoleRows.map((row) => row.id);
 
             const rolesCached = await db
               .select()
               .from(role)
               .leftJoin(user, eq(user.roleId, role.id))
               .leftJoin(rolePermission, eq(rolePermission.roleId, role.id))
-              .where(inArray(user.id, pageUserIds))
+              .where(inArray(role.id, pageRoleIds))
               .orderBy(
-                orderBy === "desc" ? desc(user.updatedAt) : asc(user.updatedAt),
-                orderBy === "desc" ? desc(user.id) : asc(user.id),
+                orderBy === "desc" ? desc(role.updatedAt) : asc(role.updatedAt),
+                orderBy === "desc" ? desc(role.id) : asc(role.id),
               );
 
             const map = new Map<string, UserRolesNodes>();
@@ -719,14 +714,16 @@ export default async function (fastify: TypedFastifyInstance) {
               }
             }
 
-            // preserve original ordering from pageUserRows
+            // preserve original ordering from pageRoleRows
             const ordered: UserRolesNodes[] = [];
             const seen = new Set<string>();
-            for (const row of pageUserRows) {
+            for (const row of pageRoleRows) {
               const uid = row.id;
+
               if (!seen.has(uid)) {
                 seen.add(uid);
                 const node = map.get(uid);
+
                 if (node) ordered.push(node);
               }
             }
