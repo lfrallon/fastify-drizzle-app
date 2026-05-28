@@ -617,7 +617,10 @@ export default async function (fastify: TypedFastifyInstance) {
       try {
         const { updatedAt, id, pageSize, orderBy, limit } = query;
 
-        const clampedPageSize = limit ?? pageSize;
+        const clampedPageSize = Math.min(
+          Math.max(limit ?? pageSize ?? 10, 1),
+          200,
+        );
 
         const cursor =
           updatedAt && id
@@ -626,6 +629,7 @@ export default async function (fastify: TypedFastifyInstance) {
                 updatedAt,
               }
             : undefined;
+
         const queryLimit = clampedPageSize + 1;
 
         const cacheKey = buildUserRolesCacheKey({
@@ -653,6 +657,10 @@ export default async function (fastify: TypedFastifyInstance) {
           cacheKey,
           300,
           async () => {
+            /**
+             * STEP 1
+             * PAGINATE ONLY ROLE IDS
+             */
             const pageRoleRows = await db
               .select({
                 id: role.id,
@@ -667,64 +675,119 @@ export default async function (fastify: TypedFastifyInstance) {
                         : gt(role.updatedAt, cursor.updatedAt),
                       and(
                         eq(role.updatedAt, cursor.updatedAt),
-                        lt(role.id, cursor.id),
+                        orderBy === "desc"
+                          ? lt(role.id, cursor.id)
+                          : gt(role.id, cursor.id),
                       ),
                     )
                   : undefined,
               )
-              .limit(queryLimit)
               .orderBy(
                 orderBy === "desc" ? desc(role.updatedAt) : asc(role.updatedAt),
                 orderBy === "desc" ? desc(role.id) : asc(role.id),
-              );
+              )
+              .limit(queryLimit);
 
             if (pageRoleRows.length === 0) return [];
 
             const pageRoleIds = pageRoleRows.map((row) => row.id);
 
-            const rolesCached = await db
+            /**
+             * STEP 2
+             * FETCH ROLES
+             */
+            const roles = await db
               .select()
               .from(role)
-              .leftJoin(user, eq(user.roleId, role.id))
-              .leftJoin(rolePermission, eq(rolePermission.roleId, role.id))
-              .where(inArray(role.id, pageRoleIds))
-              .orderBy(
-                orderBy === "desc" ? desc(role.updatedAt) : asc(role.updatedAt),
-                orderBy === "desc" ? desc(role.id) : asc(role.id),
-              );
+              .where(inArray(role.id, pageRoleIds));
 
-            const map = new Map<string, UserRolesNodes>();
+            /**
+             * STEP 3
+             * FETCH USERS SEPARATELY
+             */
+            const users = await db
+              .select()
+              .from(user)
+              .where(inArray(user.roleId, pageRoleIds));
 
-            for (const row of rolesCached) {
-              const uid = row.role.id;
-              const user = row.user ?? null;
-              const perm = row.role_permission?.permission ?? null;
+            /**
+             * STEP 4
+             * FETCH PERMISSIONS SEPARATELY
+             */
+            const permissions = await db
+              .select()
+              .from(rolePermission)
+              .where(inArray(rolePermission.roleId, pageRoleIds));
 
-              if (!map.has(uid)) {
-                map.set(uid, {
-                  ...row.role,
-                  users: user ? [user] : [],
-                  permissions: perm ? [perm] : [],
-                });
-              } else if (perm) {
-                const entry = map.get(uid)!;
-                if (!entry.permissions.includes(perm)) {
-                  entry.permissions.push(perm);
-                }
+            /**
+             * STEP 5
+             * CREATE LOOKUP MAPS
+             */
+            const usersByRoleId = new Map<string, typeof users>();
+
+            for (const u of users) {
+              const roleId = u.roleId;
+
+              if (!roleId) {
+                continue;
+              }
+
+              const existing = usersByRoleId.get(roleId);
+
+              if (existing) {
+                existing.push(u);
+              } else {
+                usersByRoleId.set(roleId, [u]);
               }
             }
 
-            // preserve original ordering from pageRoleRows
+            const permissionsByRoleId = new Map<string, Permission[]>();
+
+            for (const p of permissions) {
+              const permission = p.permission as Permission;
+              const existing = permissionsByRoleId.get(p.roleId);
+
+              if (existing) {
+                if (!existing.includes(permission)) {
+                  existing.push(permission);
+                }
+              } else {
+                permissionsByRoleId.set(p.roleId, [permission]);
+              }
+            }
+
+            /**
+             * STEP 6
+             * CREATE ROLE LOOKUP
+             */
+            const roleMap = new Map(
+              roles.map((r) => [
+                r.id,
+                {
+                  ...r,
+                  users: usersByRoleId.get(r.id) ?? [],
+                  permissions: permissionsByRoleId.get(r.id) ?? [],
+                },
+              ]),
+            );
+
+            /**
+             * STEP 7
+             * PRESERVE CURSOR ORDER
+             */
             const ordered: UserRolesNodes[] = [];
+
             const seen = new Set<string>();
+
             for (const row of pageRoleRows) {
-              const uid = row.id;
+              if (seen.has(row.id)) continue;
 
-              if (!seen.has(uid)) {
-                seen.add(uid);
-                const node = map.get(uid);
+              seen.add(row.id);
 
-                if (node) ordered.push(node);
+              const roleNode = roleMap.get(row.id);
+
+              if (roleNode) {
+                ordered.push(roleNode);
               }
             }
 
@@ -746,6 +809,7 @@ export default async function (fastify: TypedFastifyInstance) {
                   currentPageItems[currentPageItems.length - 1].updatedAt,
               }
             : null;
+
         return reply.code(200).send({
           nodes: currentPageItems,
           pageInfo: {
