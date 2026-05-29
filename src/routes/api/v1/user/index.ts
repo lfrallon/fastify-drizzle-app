@@ -290,7 +290,18 @@ export default async function (fastify: TypedFastifyInstance) {
             const pageUserIds = pageUserRows.map((row) => row.id);
 
             const usersCached = await db
-              .select()
+              .select({
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                image: user.image,
+                emailVerified: user.emailVerified,
+                createdAt: user.createdAt,
+                updatedAt: user.updatedAt,
+                roleId: user.roleId,
+                roleName: role.name,
+                permission: rolePermission.permission,
+              })
               .from(user)
               .leftJoin(role, eq(user.roleId, role.id))
               .leftJoin(rolePermission, eq(rolePermission.roleId, role.id))
@@ -303,13 +314,22 @@ export default async function (fastify: TypedFastifyInstance) {
             const map = new Map<string, UserAccountsNodes>();
 
             for (const row of usersCached) {
-              const uid = row.user.id;
-              const perm = row.role_permission?.permission ?? null;
+              const uid = row.id;
+              const perm = row.permission ?? null;
 
               if (!map.has(uid)) {
                 map.set(uid, {
-                  user: row.user,
-                  role: row.role?.name ?? null,
+                  user: {
+                    id: row.id,
+                    name: row.name,
+                    email: row.email,
+                    image: row.image,
+                    emailVerified: row.emailVerified,
+                    createdAt: row.createdAt,
+                    updatedAt: row.updatedAt,
+                    roleId: row.roleId,
+                  },
+                  role: row.roleName ?? null,
                   permissions: perm ? [perm] : [],
                 });
               } else if (perm) {
