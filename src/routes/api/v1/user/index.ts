@@ -272,7 +272,9 @@ export default async function (fastify: TypedFastifyInstance) {
                         : gt(user.updatedAt, cursor.updatedAt),
                       and(
                         eq(user.updatedAt, cursor.updatedAt),
-                        lt(user.id, cursor.id),
+                        orderBy === "desc"
+                          ? lt(user.id, cursor.id)
+                          : gt(user.id, cursor.id),
                       ),
                     )
                   : undefined,
