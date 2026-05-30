@@ -11,17 +11,15 @@ import auth from "#/lib/auth.ts";
 // types
 import type { IncomingHttpHeaders } from "node:http";
 
-export type Resource = "user" | "todos" | "map-messages";
 export type Action = "create" | "read" | "update" | "delete";
-export type Permission = `${Resource}:${Action}`;
 
 const rolePermissionsCache = new Map<
   string,
-  { permissions: Permission[]; expiresAt: number }
+  { permissions: string[]; expiresAt: number }
 >();
 const CACHE_TTL_MS = 500;
 
-async function getRolePermissions(roleName: string): Promise<Permission[]> {
+async function getRolePermissions(roleName: string): Promise<string[]> {
   const now = Date.now();
   const cached = rolePermissionsCache.get(roleName);
 
@@ -43,7 +41,7 @@ async function getRolePermissions(roleName: string): Promise<Permission[]> {
     columns: { permission: true },
   });
 
-  const permissionsList = permissions.map((p) => p.permission as Permission);
+  const permissionsList = permissions.map((p) => p.permission);
 
   // Cache the result
   rolePermissionsCache.set(roleName, {
@@ -67,7 +65,7 @@ async function getUserAccess(userId: string) {
   if (!userRecord) {
     return {
       role: "Guest",
-      permissions: [] as Permission[],
+      permissions: [] as string[],
     };
   }
 
@@ -91,7 +89,7 @@ async function getUserAccess(userId: string) {
 
   return {
     role: roleRecord?.name || "Guest",
-    permissions: permissions.map((p) => p.permission as Permission),
+    permissions: permissions.map((p) => p.permission),
   };
 }
 
@@ -110,7 +108,7 @@ interface Options {
 
 export async function accessPermissionCheck(
   headers: IncomingHttpHeaders,
-  requiredPermission: Permission,
+  requiredPermission: string,
   options?: Options,
 ) {
   const session = await auth.api.getSession({
@@ -132,7 +130,9 @@ export async function accessPermissionCheck(
   const customPermissions = userAccess.permissions;
 
   const inheritedPermissions = await getRolePermissions(userRole);
-  const allPermissions = [...new Set([...inheritedPermissions, ...customPermissions])];
+  const allPermissions = [
+    ...new Set([...inheritedPermissions, ...customPermissions]),
+  ];
 
   if (userRole === "Admin") {
     return {

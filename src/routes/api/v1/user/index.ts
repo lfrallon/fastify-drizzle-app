@@ -11,7 +11,6 @@ import type { TypedFastifyInstance } from "#/types/index.ts";
 
 // auth lib
 import { accessPermissionCheck } from "#/utils/rbac.ts";
-import type { Permission } from "#/utils/rbac.ts";
 
 // libs
 import { buildUserAccountsCacheKey } from "#/lib/user/index.ts";
@@ -37,7 +36,7 @@ type UserSelect = {
 interface UserAccountsNodes {
   user: UserSelect;
   role: string | null;
-  permissions: Permission[];
+  permissions: string[];
 }
 
 interface UserRolesNodes {
@@ -48,7 +47,7 @@ interface UserRolesNodes {
   createdAt: string;
   updatedAt: string;
   users: UserSelect[];
-  permissions: Permission[];
+  permissions: string[];
 }
 
 const PutBodySchema = z.object({
@@ -763,10 +762,10 @@ export default async function (fastify: TypedFastifyInstance) {
               }
             }
 
-            const permissionsByRoleId = new Map<string, Permission[]>();
+            const permissionsByRoleId = new Map<string, string[]>();
 
             for (const p of permissions) {
-              const permission = p.permission as Permission;
+              const permission = p.permission;
               const existing = permissionsByRoleId.get(p.roleId);
 
               if (existing) {

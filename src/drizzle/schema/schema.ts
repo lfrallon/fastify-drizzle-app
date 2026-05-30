@@ -49,19 +49,6 @@ export const account = pgTable(
   ],
 );
 
-export const permissionEnum = pgEnum("permission", [
-  "user:read",
-  "user:update",
-  "todos:read",
-  "todos:create",
-  "todos:update",
-  "todos:delete",
-  "map-messages:read",
-  "map-messages:create",
-  "map-messages:update",
-  "map-messages:delete",
-]);
-
 export const user = pgTable(
   "user",
   {
@@ -201,17 +188,33 @@ export const role = pgTable("role", {
   description: text(),
   isSystem: boolean("is_system").default(false).notNull(),
   createdAt: timestamp("created_at", { mode: "string" }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { mode: "string" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "string" })
+    .defaultNow()
+    .$onUpdate(() => sql`CURRENT_TIMESTAMP`)
+    .notNull(),
 });
+
+export const actionEnum = pgEnum("action", [
+  "create",
+  "read",
+  "update",
+  "delete",
+]);
 
 export const rolePermission = pgTable(
   "role_permission",
   {
     id: text().primaryKey().notNull(),
     roleId: text("role_id").notNull(),
-    permission: permissionEnum().notNull(),
+    resource: text().notNull(),
+    action: actionEnum().notNull(),
+    permission: text().notNull(),
     createdAt: timestamp("created_at", { mode: "string" })
       .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string" })
+      .defaultNow()
+      .$onUpdate(() => sql`CURRENT_TIMESTAMP`)
       .notNull(),
   },
   (table) => [

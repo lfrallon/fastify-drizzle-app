@@ -7,30 +7,121 @@ import { v4 } from "uuid";
 
 const DEFAULT_ROLES = {
   Admin: [
-    "user:read",
-    "user:update",
-    "todos:read",
-    "todos:create",
-    "todos:update",
-    "todos:delete",
-    "map-messages:read",
-    "map-messages:create",
-    "map-messages:update",
-    "map-messages:delete",
+    {
+      resource: "user",
+      action: "read",
+      permission: "user:read",
+    },
+    {
+      resource: "user",
+      action: "update",
+      permission: "user:update",
+    },
+    {
+      resource: "todos",
+      action: "read",
+      permission: "todos:read",
+    },
+    {
+      resource: "todos",
+      action: "create",
+      permission: "todos:create",
+    },
+    {
+      resource: "todos",
+      action: "update",
+      permission: "todos:update",
+    },
+    {
+      resource: "todos",
+      action: "delete",
+      permission: "todos:delete",
+    },
+    {
+      resource: "map-messages",
+      action: "read",
+      permission: "map-messages:read",
+    },
+    {
+      resource: "map-messages",
+      action: "create",
+      permission: "map-messages:create",
+    },
+    {
+      resource: "map-messages",
+      action: "update",
+      permission: "map-messages:update",
+    },
+    {
+      resource: "map-messages",
+      action: "delete",
+      permission: "map-messages:delete",
+    },
   ],
   User: [
-    "user:read",
-    "user:update",
-    "todos:read",
-    "todos:create",
-    "todos:update",
-    "todos:delete",
-    "map-messages:read",
-    "map-messages:create",
-    "map-messages:update",
-    "map-messages:delete",
+    {
+      resource: "user",
+      action: "read",
+      permission: "user:read",
+    },
+    {
+      resource: "user",
+      action: "update",
+      permission: "user:update",
+    },
+    {
+      resource: "todos",
+      action: "read",
+      permission: "todos:read",
+    },
+    {
+      resource: "todos",
+      action: "create",
+      permission: "todos:create",
+    },
+    {
+      resource: "todos",
+      action: "update",
+      permission: "todos:update",
+    },
+    {
+      resource: "todos",
+      action: "delete",
+      permission: "todos:delete",
+    },
+    {
+      resource: "map-messages",
+      action: "read",
+      permission: "map-messages:read",
+    },
+    {
+      resource: "map-messages",
+      action: "create",
+      permission: "map-messages:create",
+    },
+    {
+      resource: "map-messages",
+      action: "update",
+      permission: "map-messages:update",
+    },
+    {
+      resource: "map-messages",
+      action: "delete",
+      permission: "map-messages:delete",
+    },
   ],
-  Guest: ["todos:read", "map-messages:read"],
+  Guest: [
+    {
+      resource: "user",
+      action: "read",
+      permission: "user:read",
+    },
+    {
+      resource: "map-messages",
+      action: "read",
+      permission: "map-messages:read",
+    },
+  ],
 };
 
 async function seed() {
@@ -64,7 +155,9 @@ async function seed() {
         await database.insert(rolePermission).values({
           id: v4(),
           roleId,
-          permission: perm as any,
+          resource: perm.resource,
+          action: perm.action as any,
+          permission: perm.permission,
         });
       }
 
