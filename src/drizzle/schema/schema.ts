@@ -70,7 +70,7 @@ export const user = pgTable(
       columns: [table.roleId],
       foreignColumns: [role.id],
       name: "user_role_id_role_id_fk",
-    }).onDelete("cascade"),
+    }).onDelete("set null"),
     index("user_roleId_idx").on(table.roleId),
     unique("user_email_unique").on(table.email),
   ],
@@ -222,7 +222,7 @@ export const rolePermission = pgTable(
       columns: [table.roleId],
       foreignColumns: [role.id],
       name: "role_permission_role_id_fk",
-    }).onDelete("cascade"),
+    }).onDelete("set null"),
     unique("role_permission_unique").on(table.roleId, table.permission),
   ],
 );
