@@ -14,13 +14,12 @@ const main = async () => {
       `🚀  Fastify server running on port http://localhost:${FASTIFY_PORT}`,
     );
     console.log(`Route index:           /`);
-    console.log(`Route user:            /api/v1/user`);
-    console.log(`Route user accounts:   /api/v1/user/accounts`);
-    console.log(`Route user update:     /api/v1/user/update`);
+    console.log(`Route accounts:        /api/v1/accounts`);
+    console.log(`Route notes:           /api/v1/geo-notes`);
+    console.log(`Route permissions:     /api/v1/permissions`);
+    console.log(`Route roles:           /api/v1/roles`);
     console.log(`Route todos:           /api/v1/todos`);
-    console.log(`Route todos add:       /api/v1/todos/add`);
-    console.log(`Route todos delete:    /api/v1/todos/delete`);
-    console.log(`Route todos update:    /api/v1/todos/update`);
+    console.log(`Route user:            /api/v1/user`);
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "An unknown error occurred";

@@ -38,24 +38,24 @@ const DEFAULT_ROLES = {
       permission: "todos:delete",
     },
     {
-      resource: "map-messages",
+      resource: "geo-notes",
       action: "read",
-      permission: "map-messages:read",
+      permission: "geo-notes:read",
     },
     {
-      resource: "map-messages",
+      resource: "geo-notes",
       action: "create",
-      permission: "map-messages:create",
+      permission: "geo-notes:create",
     },
     {
-      resource: "map-messages",
+      resource: "geo-notes",
       action: "update",
-      permission: "map-messages:update",
+      permission: "geo-notes:update",
     },
     {
-      resource: "map-messages",
+      resource: "geo-notes",
       action: "delete",
-      permission: "map-messages:delete",
+      permission: "geo-notes:delete",
     },
   ],
   User: [
@@ -90,24 +90,24 @@ const DEFAULT_ROLES = {
       permission: "todos:delete",
     },
     {
-      resource: "map-messages",
+      resource: "geo-notes",
       action: "read",
-      permission: "map-messages:read",
+      permission: "geo-notes:read",
     },
     {
-      resource: "map-messages",
+      resource: "geo-notes",
       action: "create",
-      permission: "map-messages:create",
+      permission: "geo-notes:create",
     },
     {
-      resource: "map-messages",
+      resource: "geo-notes",
       action: "update",
-      permission: "map-messages:update",
+      permission: "geo-notes:update",
     },
     {
-      resource: "map-messages",
+      resource: "geo-notes",
       action: "delete",
-      permission: "map-messages:delete",
+      permission: "geo-notes:delete",
     },
   ],
   Guest: [
@@ -117,9 +117,9 @@ const DEFAULT_ROLES = {
       permission: "user:read",
     },
     {
-      resource: "map-messages",
+      resource: "geo-notes",
       action: "read",
-      permission: "map-messages:read",
+      permission: "geo-notes:read",
     },
   ],
 };

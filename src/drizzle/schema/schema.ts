@@ -150,12 +150,12 @@ export const todos = pgTable(
   ],
 );
 
-export const mapMessages = pgTable(
-  "map_messages",
+export const geoNotes = pgTable(
+  "geo_notes",
   {
     id: uuid().defaultRandom().primaryKey().notNull(),
     title: text().notNull(),
-    mapMessage: text().notNull(),
+    geoNote: text().notNull(),
     latitude: numeric("latitude", { mode: "number" }).notNull(),
     longitude: numeric("longitude", { mode: "number" }).notNull(),
     createdAt: timestamp("created_at", { mode: "string" }).defaultNow(),
@@ -170,15 +170,15 @@ export const mapMessages = pgTable(
     foreignKey({
       columns: [table.userId],
       foreignColumns: [user.id],
-      name: "map_messages_user_id_user_id_fk",
+      name: "geo-notes_user_id_user_id_fk",
     }).onDelete("cascade"),
-    index("map_messages_updated_at_idx").on(table.updatedAt),
-    index("map_messages_lat_lng_updated_at_idx").on(
+    index("geo-notes_updated_at_idx").on(table.updatedAt),
+    index("geo-notes_lat_lng_updated_at_idx").on(
       table.latitude,
       table.longitude,
       table.updatedAt.desc(),
     ),
-    uniqueIndex("map_messages_id_idx").on(table.id),
+    uniqueIndex("geo-notes_id_idx").on(table.id),
   ],
 );
 

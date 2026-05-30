@@ -4,14 +4,14 @@ import {
   todos,
   account,
   session,
-  mapMessages,
+  geoNotes,
   role,
   rolePermission,
 } from "./schema.ts";
 
-export const mapMessagesRelations = relations(mapMessages, ({ one }) => ({
+export const geoNotesRelations = relations(geoNotes, ({ one }) => ({
   user: one(user, {
-    fields: [mapMessages.userId],
+    fields: [geoNotes.userId],
     references: [user.id],
   }),
 }));

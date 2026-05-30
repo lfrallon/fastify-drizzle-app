@@ -134,6 +134,13 @@
       "when": 1780120559876,
       "tag": "0018_noisy_fallen_one",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1780134845019,
+      "tag": "0019_slimy_shooting_star",
+      "breakpoints": true
     }
   ]
 }

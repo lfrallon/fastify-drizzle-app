@@ -3,21 +3,21 @@ import z from "zod";
 
 // lib
 import {
-  buildMapMessagesCacheKey,
+  buildGeoNotesCacheKey,
   parseBboxString,
-} from "#/lib/map-messages/index.ts";
+} from "#/lib/geo-notes/index.ts";
 import { accessPermissionCheck } from "#/utils/rbac.ts";
 
 // db & schema
 import { db } from "#/db/index.ts";
-import { mapMessages } from "#/drizzle/schema/schema.ts";
+import { geoNotes } from "#/drizzle/schema/schema.ts";
 
 // types
 import type { TypedFastifyInstance } from "#/types/index.ts";
 import type { FastifyZodOpenApiTypeProvider } from "fastify-zod-openapi";
 
 export default async function (fastify: TypedFastifyInstance) {
-  // GET /api/v1/map-messages
+  // GET /api/v1/geo-notes
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().get(
     "",
     {
@@ -153,33 +153,33 @@ export default async function (fastify: TypedFastifyInstance) {
             : null);
         const bboxCondition = bboxFilter
           ? and(
-              gte(mapMessages.latitude, bboxFilter.south),
-              lte(mapMessages.latitude, bboxFilter.north),
+              gte(geoNotes.latitude, bboxFilter.south),
+              lte(geoNotes.latitude, bboxFilter.north),
               bboxFilter.west <= bboxFilter.east
                 ? and(
-                    gte(mapMessages.longitude, bboxFilter.west),
-                    lte(mapMessages.longitude, bboxFilter.east),
+                    gte(geoNotes.longitude, bboxFilter.west),
+                    lte(geoNotes.longitude, bboxFilter.east),
                   )
                 : or(
                     and(
-                      gte(mapMessages.longitude, bboxFilter.west),
-                      lte(mapMessages.longitude, 180),
+                      gte(geoNotes.longitude, bboxFilter.west),
+                      lte(geoNotes.longitude, 180),
                     ),
                     and(
-                      gte(mapMessages.longitude, -180),
-                      lte(mapMessages.longitude, bboxFilter.east),
+                      gte(geoNotes.longitude, -180),
+                      lte(geoNotes.longitude, bboxFilter.east),
                     ),
                   ),
             )
           : undefined;
-        const cacheKey = buildMapMessagesCacheKey({
+        const cacheKey = buildGeoNotesCacheKey({
           orderBy,
           clampedPageSize,
           cursor,
           bboxFilter,
         });
 
-        const totalCount = await db.$count(mapMessages, bboxCondition);
+        const totalCount = await db.$count(geoNotes, bboxCondition);
 
         if (totalCount === 0) {
           return reply.code(200).send({
@@ -199,18 +199,18 @@ export default async function (fastify: TypedFastifyInstance) {
           async () => {
             const todosCached = await db
               .select()
-              .from(mapMessages)
+              .from(geoNotes)
               .where(
                 and(
                   bboxCondition,
                   cursor
                     ? or(
                         orderBy === "desc"
-                          ? lt(mapMessages.updatedAt, cursor.updatedAt)
-                          : gt(mapMessages.updatedAt, cursor.updatedAt),
+                          ? lt(geoNotes.updatedAt, cursor.updatedAt)
+                          : gt(geoNotes.updatedAt, cursor.updatedAt),
                         and(
-                          eq(mapMessages.updatedAt, cursor.updatedAt),
-                          lt(mapMessages.id, cursor.id),
+                          eq(geoNotes.updatedAt, cursor.updatedAt),
+                          lt(geoNotes.id, cursor.id),
                         ),
                       )
                     : undefined,
@@ -219,9 +219,9 @@ export default async function (fastify: TypedFastifyInstance) {
               .limit(queryLimit)
               .orderBy(
                 orderBy === "desc"
-                  ? desc(mapMessages.updatedAt)
-                  : asc(mapMessages.updatedAt),
-                orderBy === "desc" ? desc(mapMessages.id) : asc(mapMessages.id),
+                  ? desc(geoNotes.updatedAt)
+                  : asc(geoNotes.updatedAt),
+                orderBy === "desc" ? desc(geoNotes.id) : asc(geoNotes.id),
               );
 
             return todosCached;
@@ -258,7 +258,7 @@ export default async function (fastify: TypedFastifyInstance) {
     },
   );
 
-  // POST /api/v1/map-messages
+  // POST /api/v1/geo-notes
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().post(
     "/add",
     {
@@ -268,7 +268,7 @@ export default async function (fastify: TypedFastifyInstance) {
             description: "The title of the map message",
             example: "Sample Map Message",
           }),
-          mapMessage: z.string({ error: "Invalid input." }).meta({
+          geoNote: z.string({ error: "Invalid input." }).meta({
             description: "The content of the map message",
             example: "Hello, this is a map message!",
           }),
@@ -291,16 +291,16 @@ export default async function (fastify: TypedFastifyInstance) {
     async ({ body, headers }, reply) => {
       const permissionResult = await accessPermissionCheck(
         headers,
-        "map-messages:create",
+        "geo-notes:create",
       );
 
-      const { title, mapMessage, latitude, longitude, videoUrl } = body;
+      const { title, geoNote, latitude, longitude, videoUrl } = body;
 
       if (!title || title.length === 0) {
         return reply.code(400).send({ error: "No title provided!" });
       }
 
-      if (!mapMessage || mapMessage.length === 0) {
+      if (!geoNote || geoNote.length === 0) {
         return reply.code(400).send({ error: "No map message provided!" });
       }
 
@@ -311,11 +311,11 @@ export default async function (fastify: TypedFastifyInstance) {
       }
 
       try {
-        const newMapMessage = await db
-          .insert(mapMessages)
+        const newGeoNote = await db
+          .insert(geoNotes)
           .values({
             title,
-            mapMessage,
+            geoNote,
             latitude,
             longitude,
             userId: permissionResult ? permissionResult.session?.user.id : null,
@@ -324,16 +324,16 @@ export default async function (fastify: TypedFastifyInstance) {
           .returning();
 
         // ✅ invalidate related read caches
-        await fastify.cache.delByPrefix("mapMessages:");
+        await fastify.cache.delByPrefix("geoNotes:");
 
-        return reply.send(newMapMessage[0]);
+        return reply.send(newGeoNote[0]);
       } catch (error) {
         return reply.code(500).send({ error: "Internal Server Error" });
       }
     },
   );
 
-  // DELETE /api/v1/map-messages
+  // DELETE /api/v1/geo-notes
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().delete(
     "",
     {
@@ -395,7 +395,7 @@ export default async function (fastify: TypedFastifyInstance) {
     async ({ body, headers }, reply) => {
       const permissionResult = await accessPermissionCheck(
         headers,
-        "map-messages:delete",
+        "geo-notes:delete",
       );
       if (!permissionResult.currentUser || !permissionResult.session) {
         return reply.status(permissionResult.statusCode).send({
@@ -413,41 +413,41 @@ export default async function (fastify: TypedFastifyInstance) {
           return reply.code(400).send({ error: "No data provided." });
         }
 
-        const deletedMapMessages = [];
+        const deletedGeoNotes = [];
 
         for (const item of data) {
           const { id } = item;
 
           const whereConditions =
             permissionResult.currentUser.role === "Admin"
-              ? eq(mapMessages.id, id)
+              ? eq(geoNotes.id, id)
               : and(
-                  eq(mapMessages.id, id),
-                  eq(mapMessages.userId, permissionResult.session.user.id),
+                  eq(geoNotes.id, id),
+                  eq(geoNotes.userId, permissionResult.session.user.id),
                 );
 
-          const existingMapMessages = await db
+          const existinggeoNotes = await db
             .select()
-            .from(mapMessages)
+            .from(geoNotes)
             .where(whereConditions)
             .limit(1)
             .then((rows) => rows[0] || undefined);
 
-          if (!existingMapMessages) {
+          if (!existinggeoNotes) {
             continue;
           }
 
-          const deletedMapMessage = await db
-            .delete(mapMessages)
+          const deletedGeoNote = await db
+            .delete(geoNotes)
             .where(whereConditions)
             .returning();
 
-          if (deletedMapMessage.length > 0) {
-            deletedMapMessages.push(deletedMapMessage[0]);
+          if (deletedGeoNote.length > 0) {
+            deletedGeoNotes.push(deletedGeoNote[0]);
           }
         }
 
-        if (deletedMapMessages.length === 0) {
+        if (deletedGeoNotes.length === 0) {
           return reply.code(404).send({ error: "Request not completed." });
         }
 
@@ -502,7 +502,7 @@ export default async function (fastify: TypedFastifyInstance) {
                   north,
                 }
               : null);
-          const cacheKey = buildMapMessagesCacheKey({
+          const cacheKey = buildGeoNotesCacheKey({
             orderBy,
             clampedPageSize,
             cursor,
@@ -516,8 +516,8 @@ export default async function (fastify: TypedFastifyInstance) {
         }
 
         return reply.send({
-          message: `${deletedMapMessages.length} item/s deleted successfully`,
-          deletedItems: deletedMapMessages.map((item) => ({
+          message: `${deletedGeoNotes.length} item/s deleted successfully`,
+          deletedItems: deletedGeoNotes.map((item) => ({
             id: item.id,
             title: item.title,
           })),
@@ -528,7 +528,7 @@ export default async function (fastify: TypedFastifyInstance) {
     },
   );
 
-  // PUT /api/v1/map-messages
+  // PUT /api/v1/geo-notes
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().put(
     "/update",
     {
@@ -545,7 +545,7 @@ export default async function (fastify: TypedFastifyInstance) {
                   description: "The new title of the todo item",
                   example: "Water the plants.",
                 }),
-                mapMessage: z.string({ error: "Invalid input." }).meta({
+                geoNote: z.string({ error: "Invalid input." }).meta({
                   description: "The content of the map message",
                   example: "Hello, this is a map message!",
                 }),
@@ -604,7 +604,7 @@ export default async function (fastify: TypedFastifyInstance) {
               })
               .refine(
                 (data) =>
-                  data.title !== undefined || data.mapMessage !== undefined,
+                  data.title !== undefined || data.geoNote !== undefined,
                 {
                   message:
                     "At least one of 'title' or 'message' must be provided.",
@@ -617,7 +617,7 @@ export default async function (fastify: TypedFastifyInstance) {
     async ({ body, headers }, reply) => {
       const permissionResult = await accessPermissionCheck(
         headers,
-        "map-messages:update",
+        "geo-notes:update",
       );
       if (!permissionResult.currentUser || !permissionResult.session) {
         return reply.status(permissionResult.statusCode).send({
@@ -635,52 +635,48 @@ export default async function (fastify: TypedFastifyInstance) {
           return reply.code(400).send({ error: "No data provided." });
         }
 
-        const updatedMapMessages = [];
+        const updatedGeoNotes = [];
 
         for (const item of data) {
-          const { id, title, mapMessage, videoUrl } = item;
+          const { id, title, geoNote, videoUrl } = item;
 
           const whereConditions =
             permissionResult.currentUser.role === "Admin"
-              ? eq(mapMessages.id, id)
+              ? eq(geoNotes.id, id)
               : and(
-                  eq(mapMessages.id, id),
-                  eq(mapMessages.userId, permissionResult.session.user.id),
+                  eq(geoNotes.id, id),
+                  eq(geoNotes.userId, permissionResult.session.user.id),
                 );
 
-          const existingMapMessages = await db
+          const existingGeoNotes = await db
             .select()
-            .from(mapMessages)
+            .from(geoNotes)
             .where(whereConditions)
             .limit(1)
             .then((rows) => rows[0] || undefined);
 
-          if (!existingMapMessages) {
+          if (!existingGeoNotes) {
             continue;
           }
 
-          const updatedMapMessage = await db
-            .update(mapMessages)
+          const updatedGeoNote = await db
+            .update(geoNotes)
             .set({
-              title: title !== undefined ? title : existingMapMessages.title,
-              mapMessage:
-                mapMessage !== undefined
-                  ? mapMessage
-                  : existingMapMessages.mapMessage,
+              title: title !== undefined ? title : existingGeoNotes.title,
+              geoNote:
+                geoNote !== undefined ? geoNote : existingGeoNotes.geoNote,
               videoUrl:
-                videoUrl !== undefined
-                  ? videoUrl
-                  : existingMapMessages.videoUrl,
+                videoUrl !== undefined ? videoUrl : existingGeoNotes.videoUrl,
             })
             .where(whereConditions)
             .returning();
 
-          if (updatedMapMessage.length > 0) {
-            updatedMapMessages.push(updatedMapMessage[0]);
+          if (updatedGeoNote.length > 0) {
+            updatedGeoNotes.push(updatedGeoNote[0]);
           }
         }
 
-        if (updatedMapMessages.length === 0) {
+        if (updatedGeoNotes.length === 0) {
           return reply.code(404).send({
             error: "No items were updated. Please check the provided data.",
           });
@@ -737,7 +733,7 @@ export default async function (fastify: TypedFastifyInstance) {
                   north,
                 }
               : null);
-          const cacheKey = buildMapMessagesCacheKey({
+          const cacheKey = buildGeoNotesCacheKey({
             orderBy,
             clampedPageSize,
             cursor,
@@ -751,11 +747,11 @@ export default async function (fastify: TypedFastifyInstance) {
         }
 
         return reply.send({
-          message: `${updatedMapMessages.length} item/s updated successfully`,
-          updatedItems: updatedMapMessages.map((item) => ({
+          message: `${updatedGeoNotes.length} item/s updated successfully`,
+          updatedItems: updatedGeoNotes.map((item) => ({
             id: item.id,
             title: item.title,
-            mapMessage: item.mapMessage,
+            geoNote: item.geoNote,
             videoUrl: item.videoUrl,
           })),
         });

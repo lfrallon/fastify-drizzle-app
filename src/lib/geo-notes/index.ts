@@ -25,16 +25,16 @@ export function parseBboxString(bbox: string) {
 }
 
 /**
- * The function `buildMapMessagesCacheKey` generates a cache key based on input parameters for map
+ * The function `buildGeoNotesCacheKey` generates a cache key based on input parameters for map
  * messages.
- * @param params - The `buildMapMessagesCacheKey` function takes in an object `params` with the
+ * @param params - The `buildGeoNotesCacheKey` function takes in an object `params` with the
  * following properties:
- * @returns The function `buildMapMessagesCacheKey` returns a cache key string based on the provided
+ * @returns The function `buildGeoNotesCacheKey` returns a cache key string based on the provided
  * parameters. The cache key includes information such as the order by value, clamped page size, cursor
  * id and updated at values (if provided), and bbox filter values (if provided). The cache key is
  * constructed by joining these values with specific prefixes using the pipe character "|".
  */
-export function buildMapMessagesCacheKey(params: {
+export function buildGeoNotesCacheKey(params: {
   orderBy: "asc" | "desc";
   clampedPageSize: number;
   cursor?: {
@@ -51,7 +51,7 @@ export function buildMapMessagesCacheKey(params: {
   const { orderBy, clampedPageSize, cursor, bboxFilter } = params;
 
   return [
-    "mapMessages:",
+    "geoNotes:",
     `orderBy:${orderBy}`,
     `pageSize:${clampedPageSize}`,
     `cursorId:${cursor?.id ?? "none"}`,
