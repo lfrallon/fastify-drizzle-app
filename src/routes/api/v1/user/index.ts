@@ -18,6 +18,7 @@ import { account, user } from "#/drizzle/schema/index.ts";
 // libs
 import { accessPermissionCheck } from "#/utils/rbac.ts";
 import { argon2Options } from "#/lib/auth.ts";
+import { parseBufferToDynamicBase64 } from "#/utils/file-type.ts";
 
 const PutBodySchema = z.object({
   firstName: z
@@ -134,32 +135,18 @@ export default async function (fastify: TypedFastifyInstance) {
     {
       schema: {
         body: z.object({
-          email: z.email(),
-          firstName: z
-            .string({ error: "Invalid input." })
-            .meta({ description: "First name", example: "John" }),
-          lastName: z
-            .string({ error: "Invalid input." })
-            .meta({ description: "First name", example: "John" }),
-          password: z
-            .string({ error: "Invalid input." })
-            .meta({ description: "Password" }),
-          image: z
-            .instanceof(File, { message: "Please select an image file." })
-            .refine(
-              (file) => file.size <= MAX_FILE_SIZE,
-              `Max image size is 5MB.`,
-            )
-            .refine(
-              (file) => ACCEPTED_IMAGE_TYPES.includes(file.type),
-              "Only .jpg, .jpeg, .png and .webp formats are supported.",
-            )
-            .optional(),
-          roleId: z.string().nullable(),
+          firstName: z.string().min(2, "First name is required"),
+          lastName: z.string().min(2, "Last name is required"),
+          email: z.email("Invalid email address"),
+          password: z.string().min(8, "Password must be at least 6 characters"),
+          roleId: z.string(),
+          image: z.instanceof(Buffer).or(z.null()).or(z.undefined()).optional(),
         }),
       },
     },
     async ({ body, headers }, reply) => {
+      console.log("🚀 ~ body:", typeof body.image);
+
       const permissionResult = await accessPermissionCheck(
         headers,
         "user:create",
@@ -174,7 +161,9 @@ export default async function (fastify: TypedFastifyInstance) {
       }
 
       try {
-        const { email, firstName, lastName, roleId, password } = body;
+        const { email, firstName, lastName, roleId, password, image } = body;
+
+        let imageString = null;
 
         if (!firstName || firstName.trim().length === 0) {
           return reply.code(400).send({ error: "First name is required!" });
@@ -192,6 +181,10 @@ export default async function (fastify: TypedFastifyInstance) {
           return reply.code(400).send({ error: "Password is required!" });
         }
 
+        if (image && typeof image === "object") {
+          imageString = await parseBufferToDynamicBase64(image);
+        }
+
         const passwordHash = await hash(password, argon2Options);
 
         const newUser = await db.transaction(async (tx) => {
@@ -203,7 +196,7 @@ export default async function (fastify: TypedFastifyInstance) {
               name: `${firstName} ${lastName}`,
               email: email.toLowerCase(),
               emailVerified: false,
-              image: null,
+              image: imageString,
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
             })

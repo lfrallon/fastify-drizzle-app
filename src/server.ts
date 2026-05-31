@@ -11,6 +11,7 @@ import {
   serializerCompiler,
   validatorCompiler,
 } from "fastify-zod-openapi";
+import multipart from "@fastify/multipart";
 import qs from "qs";
 
 // libs
@@ -92,6 +93,12 @@ export const createServer = async () => {
   fastify.setSerializerCompiler(serializerCompiler);
 
   fastify.register(fastifyZodOpenApiPlugin);
+  fastify.register(multipart, {
+    attachFieldsToBody: "keyValues",
+    limits: {
+      fileSize: 5 * 1024 * 1024,
+    },
+  });
 
   // Configure CORS policies
   fastify.register(fastifyCors, {
