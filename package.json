@@ -51,7 +51,7 @@
     "fastify-tsconfig": "^3.0.0",
     "prettier": "^3.8.3",
     "standard-version": "^9.5.0",
-    "tsx": "^4.22.3",
+    "tsx": "^4.22.4",
     "typescript": "^6.0.3"
   },
   "imports": {
