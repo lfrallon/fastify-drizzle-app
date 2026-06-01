@@ -16,4 +16,4 @@ docker-compose.yml
 redis/redis.conf
 
 # images
-src/public/uploads
+src/public/uploads/
