@@ -18,9 +18,11 @@ WORKDIR /app
 # Enable pnpm via Corepack
 RUN corepack enable
 
-# Create non-root user
-RUN addgroup -S nodejs -g 1001 && \
-    adduser -S nodejs -u 1001 -G nodejs
+# # Create non-root user
+# RUN addgroup -S nodejs -g 1001 && \
+#     adduser -S nodejs -u 1001 -G nodejs
+
+RUN mkdir -p /app/src/public/uploads
 
 # ========================================
 # Dependencies Stage
@@ -86,7 +88,7 @@ ENV NODE_ENV=development
 
 COPY . .
 
-USER nodejs
+USER node
 
 EXPOSE 3006
 
@@ -111,9 +113,9 @@ COPY --from=build /app/package.json ./
 COPY --from=build /app/dist ./dist
 
 # Ownership
-RUN chown -R nodejs:nodejs /app
+RUN chown -R node:node /app
 
-USER nodejs
+USER node
 
 EXPOSE 3006
 

@@ -1,5 +1,6 @@
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import fs from "fs";
 import Fastify from "fastify";
 import fastifyCors from "@fastify/cors";
 import fastifyAutoload from "@fastify/autoload";
@@ -12,6 +13,7 @@ import {
   validatorCompiler,
 } from "fastify-zod-openapi";
 import multipart from "@fastify/multipart";
+import fastifyStatic from "@fastify/static";
 import qs from "qs";
 
 // libs
@@ -89,10 +91,20 @@ export const createServer = async () => {
     },
   }).withTypeProvider<FastifyZodOpenApiTypeProvider>();
 
+  const UPLOADS_DIR = join(__dirname, "public/uploads");
+
+  if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  }
+
   fastify.setValidatorCompiler(validatorCompiler);
   fastify.setSerializerCompiler(serializerCompiler);
 
   fastify.register(fastifyZodOpenApiPlugin);
+  fastify.register(fastifyStatic, {
+    root: UPLOADS_DIR,
+    prefix: "/public/", // Files will be available at http://localhost:3000/public/filename.ext
+  });
   fastify.register(multipart, {
     attachFieldsToBody: "keyValues",
     limits: {

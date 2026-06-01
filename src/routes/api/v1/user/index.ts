@@ -1,15 +1,12 @@
+import { fileURLToPath } from "url";
+import { dirname, extname, join } from "path";
+import fs from "fs";
+import { fileTypeFromBuffer } from "file-type";
+import { pipeline } from "stream/promises";
 import { eq } from "drizzle-orm";
 import { hash, type Options } from "@node-rs/argon2";
 import { v4 } from "uuid";
 import z from "zod";
-
-// types
-import type { FastifyRequest, FastifyReply } from "fastify";
-import type {
-  FastifyZodOpenApiSchema,
-  FastifyZodOpenApiTypeProvider,
-} from "fastify-zod-openapi";
-import type { TypedFastifyInstance } from "#/types/index.ts";
 
 // db
 import { db } from "#/db/index.ts";
@@ -19,6 +16,18 @@ import { account, user } from "#/drizzle/schema/index.ts";
 import { accessPermissionCheck } from "#/utils/rbac.ts";
 import { argon2Options } from "#/lib/auth.ts";
 import { parseBufferToDynamicBase64 } from "#/utils/file-type.ts";
+
+// types
+import type { FastifyRequest, FastifyReply } from "fastify";
+import type {
+  FastifyZodOpenApiSchema,
+  FastifyZodOpenApiTypeProvider,
+} from "fastify-zod-openapi";
+import type { TypedFastifyInstance } from "#/types/index.ts";
+
+// Helper to get __dirname in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const PutBodySchema = z.object({
   firstName: z
@@ -95,13 +104,7 @@ const AccessResponseSchema = {
   }),
 };
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-const ACCEPTED_IMAGE_TYPES = [
-  "image/jpeg",
-  "image/jpg",
-  "image/png",
-  "image/webp",
-];
+const UPLOADS_DIR = join(__dirname, "public/uploads");
 
 export default async function (fastify: TypedFastifyInstance) {
   // GET /api/v1/user
@@ -130,6 +133,32 @@ export default async function (fastify: TypedFastifyInstance) {
       }
     });
 
+  // GET /api/v1/user/avatar
+  // fastify
+  //   .withTypeProvider<FastifyZodOpenApiTypeProvider>()
+  //   .get("/avatar", async function ({ headers }, reply) {
+  //     const permissionResult = await accessPermissionCheck(
+  //       headers,
+  //       "user:read",
+  //     );
+  //     if (!permissionResult.currentUser || !permissionResult.session) {
+  //       const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
+
+  //       return reply.status(statusCode).send({
+  //         error: permissionResult.error,
+  //         ...(permissionResult.message
+  //           ? { message: permissionResult.message }
+  //           : {}),
+  //       });
+  //     }
+
+  //     try {
+  //       return reply.send({ image: permissionResult.session.user.image });
+  //     } catch (error) {
+  //       return reply.code(500).send({ error: "Internal Server Error" });
+  //     }
+  //   });
+
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().post(
     "/create",
     {
@@ -140,15 +169,39 @@ export default async function (fastify: TypedFastifyInstance) {
           email: z.email("Invalid email address"),
           password: z.string().min(8, "Password must be at least 6 characters"),
           roleId: z.string(),
-          image: z.instanceof(Buffer).or(z.null()).or(z.undefined()).optional(),
+          // image: z
+          //   .object({
+          //     type: z.literal("file"),
+          //     filename: z.string(),
+          //     mimetype: z
+          //       .string()
+          //       .refine(
+          //         (val) =>
+          //           ["image/jpeg", "image/png", "image/webp"].includes(val),
+          //         {
+          //           message: "Only JPEG, PNG, or WebP images are allowed",
+          //         },
+          //       ),
+          //     toBuffer: z.function(),
+          //   })
+          //   .optional(),
+          image: z
+            .instanceof(Buffer, {
+              message: "Image must be a valid file buffer",
+            })
+            .refine((buffer) => {
+              // Optional: Validate file size directly from the buffer (e.g., 5MB limit)
+              const FIVE_MB = 5 * 1024 * 1024;
+              return buffer.length <= FIVE_MB;
+            }, "Image must be smaller than 5MB"),
         }),
       },
     },
-    async ({ body, headers }, reply) => {
-      console.log("🚀 ~ body:", typeof body.image);
+    async (request, reply) => {
+      console.log("🚀 ~ request:", request);
 
       const permissionResult = await accessPermissionCheck(
-        headers,
+        request.headers,
         "user:create",
       );
       if (!permissionResult.currentUser || !permissionResult.session) {
@@ -161,7 +214,9 @@ export default async function (fastify: TypedFastifyInstance) {
       }
 
       try {
-        const { email, firstName, lastName, roleId, password, image } = body;
+        const { email, firstName, lastName, roleId, password, image } =
+          request.body;
+        console.log("🚀 ~ image:", image, typeof image);
 
         let imageString = null;
 
@@ -181,8 +236,58 @@ export default async function (fastify: TypedFastifyInstance) {
           return reply.code(400).send({ error: "Password is required!" });
         }
 
-        if (image && typeof image === "object") {
-          imageString = await parseBufferToDynamicBase64(image);
+        if (image) {
+          const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"];
+          const meta = await fileTypeFromBuffer(image);
+
+          let mimetype: string | null =
+            typeof meta?.mime === "string" ? meta.mime : null;
+
+          if (!mimetype && typeof meta?.ext === "string") {
+            const ext = meta.ext;
+            const extToMime: Record<string, string> = {
+              ".jpg": "image/jpeg",
+              ".jpeg": "image/jpeg",
+              ".png": "image/png",
+              ".webp": "image/webp",
+            };
+            mimetype = extToMime[ext] ?? null;
+          }
+
+          if (!mimetype || !allowedMimeTypes.includes(mimetype)) {
+            return reply.code(400).send({
+              error: "Invalid image format. Allowed types: JPEG, PNG, WebP",
+            });
+          }
+
+          try {
+            const UPLOADS_DIR = "/app/src/public/uploads";
+
+            // Ensure uploads directory exists
+            if (!fs.existsSync(UPLOADS_DIR)) {
+              fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+            }
+
+            // Generate a unique filename to prevent overwrites
+            const ext =
+              mimetype === "image/png"
+                ? ".png"
+                : mimetype === "image/webp"
+                  ? ".webp"
+                  : ".jpg";
+            const uniqueFileName = `${Date.now()}-${firstName}_${lastName}${ext}`;
+            const savePath = join(UPLOADS_DIR, uniqueFileName);
+
+            // Write the buffer to disk
+            await fs.promises.writeFile(savePath, image);
+
+            // Construct the browsable URL
+            imageString = `${request.protocol}://${request.hostname}/public/uploads/${uniqueFileName}`;
+            console.log("🚀 ~ imageString:", imageString);
+          } catch (error) {
+            console.error("Error saving image file:", error);
+            return reply.code(500).send({ error: "Failed to save image file" });
+          }
         }
 
         const passwordHash = await hash(password, argon2Options);

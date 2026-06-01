@@ -31,6 +31,7 @@ services:
       ALLOWED_ORIGINS: '${ALLOWED_ORIGINS}'
     volumes:
       - ./src:/app/src:ro,Z
+      - ./src/public/uploads:/app/src/public/uploads:rw,Z
       # - ./package.json:/app/package.json:Z
     depends_on:
       db:
