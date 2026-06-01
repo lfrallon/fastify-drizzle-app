@@ -35,7 +35,7 @@
     "fastify-plugin": "^5.1.0",
     "fastify-zod-openapi": "^5.6.1",
     "file-type": "^22.0.1",
-    "ioredis": "^5.10.1",
+    "ioredis": "^5.11.0",
     "pg": "^8.21.0",
     "qs": "^6.15.2",
     "tsdown": "^0.21.10",
