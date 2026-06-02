@@ -1,10 +1,8 @@
-import { fileURLToPath } from "url";
-import { dirname, extname, join } from "path";
+import { join } from "path";
 import fs from "fs";
 import { fileTypeFromBuffer } from "file-type";
-import { pipeline } from "stream/promises";
 import { eq } from "drizzle-orm";
-import { hash, type Options } from "@node-rs/argon2";
+import { hash } from "@node-rs/argon2";
 import { v4 } from "uuid";
 import z from "zod";
 
@@ -15,7 +13,6 @@ import { account, user } from "#/drizzle/schema/index.ts";
 // libs
 import { accessPermissionCheck } from "#/utils/rbac.ts";
 import { argon2Options } from "#/lib/auth.ts";
-import { parseBufferToDynamicBase64 } from "#/utils/file-type.ts";
 
 // types
 import type { FastifyRequest, FastifyReply } from "fastify";
@@ -24,10 +21,6 @@ import type {
   FastifyZodOpenApiTypeProvider,
 } from "fastify-zod-openapi";
 import type { TypedFastifyInstance } from "#/types/index.ts";
-
-// Helper to get __dirname in ESM
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 const PutBodySchema = z.object({
   firstName: z
@@ -104,7 +97,7 @@ const AccessResponseSchema = {
   }),
 };
 
-const UPLOADS_DIR = join(__dirname, "public/uploads");
+const UPLOADS_DIR = "/app/src/public/uploads";
 
 export default async function (fastify: TypedFastifyInstance) {
   // GET /api/v1/user
@@ -133,32 +126,6 @@ export default async function (fastify: TypedFastifyInstance) {
       }
     });
 
-  // GET /api/v1/user/avatar
-  // fastify
-  //   .withTypeProvider<FastifyZodOpenApiTypeProvider>()
-  //   .get("/avatar", async function ({ headers }, reply) {
-  //     const permissionResult = await accessPermissionCheck(
-  //       headers,
-  //       "user:read",
-  //     );
-  //     if (!permissionResult.currentUser || !permissionResult.session) {
-  //       const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
-
-  //       return reply.status(statusCode).send({
-  //         error: permissionResult.error,
-  //         ...(permissionResult.message
-  //           ? { message: permissionResult.message }
-  //           : {}),
-  //       });
-  //     }
-
-  //     try {
-  //       return reply.send({ image: permissionResult.session.user.image });
-  //     } catch (error) {
-  //       return reply.code(500).send({ error: "Internal Server Error" });
-  //     }
-  //   });
-
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().post(
     "/create",
     {
@@ -169,25 +136,12 @@ export default async function (fastify: TypedFastifyInstance) {
           email: z.email("Invalid email address"),
           password: z.string().min(8, "Password must be at least 6 characters"),
           roleId: z.string(),
-          // image: z
-          //   .object({
-          //     type: z.literal("file"),
-          //     filename: z.string(),
-          //     mimetype: z
-          //       .string()
-          //       .refine(
-          //         (val) =>
-          //           ["image/jpeg", "image/png", "image/webp"].includes(val),
-          //         {
-          //           message: "Only JPEG, PNG, or WebP images are allowed",
-          //         },
-          //       ),
-          //     toBuffer: z.function(),
-          //   })
-          //   .optional(),
           image: z
             .instanceof(Buffer, {
               message: "Image must be a valid file buffer",
+            })
+            .meta({
+              description: "Optional user avatar image file buffer",
             })
             .refine((buffer) => {
               // Optional: Validate file size directly from the buffer (e.g., 5MB limit)
@@ -198,8 +152,6 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async (request, reply) => {
-      console.log("🚀 ~ request:", request);
-
       const permissionResult = await accessPermissionCheck(
         request.headers,
         "user:create",
@@ -216,7 +168,6 @@ export default async function (fastify: TypedFastifyInstance) {
       try {
         const { email, firstName, lastName, roleId, password, image } =
           request.body;
-        console.log("🚀 ~ image:", image, typeof image);
 
         let imageString = null;
 
@@ -261,29 +212,22 @@ export default async function (fastify: TypedFastifyInstance) {
           }
 
           try {
-            const UPLOADS_DIR = "/app/src/public/uploads";
-
-            // Ensure uploads directory exists
             if (!fs.existsSync(UPLOADS_DIR)) {
               fs.mkdirSync(UPLOADS_DIR, { recursive: true });
             }
 
-            // Generate a unique filename to prevent overwrites
             const ext =
               mimetype === "image/png"
                 ? ".png"
                 : mimetype === "image/webp"
                   ? ".webp"
                   : ".jpg";
-            const uniqueFileName = `${Date.now()}-${firstName}_${lastName}${ext}`;
+            const uniqueFileName = `${Date.now()}_${firstName}_${lastName}${ext}`;
             const savePath = join(UPLOADS_DIR, uniqueFileName);
 
-            // Write the buffer to disk
             await fs.promises.writeFile(savePath, image);
 
-            // Construct the browsable URL
-            imageString = `${request.protocol}://${request.hostname}/public/uploads/${uniqueFileName}`;
-            console.log("🚀 ~ imageString:", imageString);
+            imageString = `/profile/${uniqueFileName}`;
           } catch (error) {
             console.error("Error saving image file:", error);
             return reply.code(500).send({ error: "Failed to save image file" });
