@@ -19,8 +19,12 @@ import qs from "qs";
 // libs
 import auth from "#/lib/auth.ts";
 
+// utils
+import { accessPermissionCheck } from "./utils/rbac.ts";
+
 // types
 import type { FastifyZodOpenApiTypeProvider } from "fastify-zod-openapi";
+import type { TypedFastifyInstance } from "./types/index.ts";
 
 // Helper to get __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -83,6 +87,54 @@ function withCors(handler: (req: Request) => Promise<Response>) {
 
 const baseHandler = withCors(auth.handler);
 
+const UPLOADS_DIR = join(__dirname, "public/uploads");
+
+async function secureStaticPlugin(
+  fastify: TypedFastifyInstance,
+  opts: NonNullable<fastifyStatic.FastifyStaticOptions>,
+) {
+  fastify.addHook("onRequest", async ({ headers, url }, reply) => {
+    const permissionResult = await accessPermissionCheck(headers, "user:read");
+    if (!permissionResult.currentUser || !permissionResult.session) {
+      const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
+
+      return reply.status(statusCode).send({
+        error: permissionResult.error,
+        ...(permissionResult.message
+          ? { message: permissionResult.message }
+          : {}),
+      });
+    }
+
+    if (permissionResult.currentUser.role === "Admin") return;
+
+    const requestedProfileUrl = url?.startsWith("/profile/") ? url : null;
+    const profileUrl = permissionResult.currentUser.image ?? null;
+
+    if (requestedProfileUrl && profileUrl) {
+      if (requestedProfileUrl !== profileUrl) {
+        return reply.status(403).send({
+          error: "Forbidden",
+          message: "You do not have permission to access this resource",
+        });
+      }
+
+      return;
+    } else {
+      return reply.status(403).send({
+        error: "Forbidden",
+        message: "You do not have permission to access this resource",
+      });
+    }
+  });
+
+  fastify.register(fastifyStatic, {
+    root: UPLOADS_DIR,
+    prefix: "/profile/",
+    ...opts,
+  });
+}
+
 export const createServer = async () => {
   const fastify = Fastify({
     logger: true,
@@ -90,8 +142,6 @@ export const createServer = async () => {
       querystringParser: (str) => qs.parse(str),
     },
   }).withTypeProvider<FastifyZodOpenApiTypeProvider>();
-
-  const UPLOADS_DIR = join(__dirname, "public/uploads");
 
   if (!fs.existsSync(UPLOADS_DIR)) {
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -101,10 +151,7 @@ export const createServer = async () => {
   fastify.setSerializerCompiler(serializerCompiler);
 
   fastify.register(fastifyZodOpenApiPlugin);
-  fastify.register(fastifyStatic, {
-    root: UPLOADS_DIR,
-    prefix: "/public/", // Files will be available at http://localhost:3000/public/filename.ext
-  });
+  fastify.register(secureStaticPlugin);
   fastify.register(multipart, {
     attachFieldsToBody: "keyValues",
     limits: {
