@@ -162,7 +162,7 @@ export const createServer = async () => {
   // Configure CORS policies
   fastify.register(fastifyCors, {
     origin: process.env.CLIENT_ORIGIN || "http://localhost:3000",
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowedHeaders: [
       "Content-Type",
       "Authorization",

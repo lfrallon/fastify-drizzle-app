@@ -22,54 +22,6 @@ import type {
 } from "fastify-zod-openapi";
 import type { TypedFastifyInstance } from "#/types/index.ts";
 
-const PutBodySchema = z.object({
-  firstName: z
-    .string()
-    .min(2, "First name is required.")
-    .meta({ description: "User's first name", example: "John" }),
-  lastName: z
-    .string()
-    .min(2, "Last name is required.")
-    .meta({ description: "User's last name", example: "Doe" }),
-}) satisfies FastifyZodOpenApiSchema;
-
-const UpdateResponseSchema = {
-  200: z.object({
-    id: z.string(),
-    name: z.string(),
-    email: z.email(),
-    image: z.string().nullable(),
-    emailVerified: z.boolean(),
-    createdAt: z.string().meta({
-      description: "User creation date",
-      example: "2024-01-01T00:00:00.000Z",
-    }),
-    updatedAt: z.string().meta({
-      description: "User last update date",
-      example: "2024-01-01T00:00:00.000Z",
-    }),
-  }),
-  401: z.object({
-    error: z.string().meta({
-      description: "Unauthorized error message",
-      example: "Unauthorized",
-    }),
-  }),
-  403: z.object({
-    error: z.string().meta({
-      description: "Forbidden error message",
-      example: "Forbidden",
-    }),
-    message: z.string().optional(),
-  }),
-  500: z.object({
-    error: z.string().meta({
-      description: "Internal Server Error message",
-      example: "Internal Server Error",
-    }),
-  }),
-};
-
 const AccessResponseSchema = {
   200: z.object({
     id: z.string().nullable(),
@@ -282,11 +234,71 @@ export default async function (fastify: TypedFastifyInstance) {
     "/update",
     {
       schema: {
-        body: PutBodySchema,
-        response: UpdateResponseSchema,
+        body: z.object({
+          userId: z.string().min(2, "User id is required."),
+          firstName: z.string().min(2, "First name").optional(),
+          lastName: z.string().min(2, "Last name").optional(),
+          email: z.email("Email address").optional(),
+          password: z
+            .string()
+            .min(8, "Password must be at least 6 characters")
+            .optional(),
+          roleId: z.string().optional(),
+          image: z
+            .instanceof(Buffer, {
+              message: "Image must be a valid file buffer",
+            })
+            .meta({
+              description: "Optional user avatar image file buffer",
+            })
+            .refine((buffer) => {
+              // Optional: Validate file size directly from the buffer (e.g., 5MB limit)
+              const FIVE_MB = 5 * 1024 * 1024;
+              return buffer.length <= FIVE_MB;
+            }, "Image must be smaller than 5MB")
+            .optional(),
+        }),
+        response: {
+          200: z.object({
+            id: z.string(),
+            name: z.string(),
+            email: z.email(),
+            image: z.string().nullable(),
+            emailVerified: z.boolean(),
+            createdAt: z.string().meta({
+              description: "User creation date",
+              example: "2024-01-01T00:00:00.000Z",
+            }),
+            updatedAt: z.string().meta({
+              description: "User last update date",
+              example: "2024-01-01T00:00:00.000Z",
+            }),
+          }),
+          401: z.object({
+            error: z.string().meta({
+              description: "Unauthorized error message",
+              example: "Unauthorized",
+            }),
+          }),
+          403: z.object({
+            error: z.string().meta({
+              description: "Forbidden error message",
+              example: "Forbidden",
+            }),
+            message: z.string().optional(),
+          }),
+          500: z.object({
+            error: z.string().meta({
+              description: "Internal Server Error message",
+              example: "Internal Server Error",
+            }),
+          }),
+        },
       },
     },
     async ({ body, headers }, reply) => {
+      console.log("🚀 ~ body:", body);
+
       const permissionResult = await accessPermissionCheck(
         headers,
         "user:update",
@@ -303,7 +315,9 @@ export default async function (fastify: TypedFastifyInstance) {
       }
 
       try {
-        const { firstName, lastName } = body;
+        // TODO: Implemet a user update
+        const { firstName, lastName, email, image, password, roleId, userId } =
+          body;
 
         const updateUser = await db
           .update(user)
@@ -311,7 +325,7 @@ export default async function (fastify: TypedFastifyInstance) {
             name: `${firstName} ${lastName}`,
             updatedAt: new Date().toISOString(),
           })
-          .where(eq(user.id, permissionResult.session.user.id))
+          .where(eq(user.id, userId))
           .returning();
 
         return reply.code(200).send(updateUser[0]);
