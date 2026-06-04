@@ -195,6 +195,8 @@ export default async function (fastify: TypedFastifyInstance) {
               id: v4(),
               roleId,
               name: `${firstName} ${lastName}`,
+              firstName,
+              lastName,
               email: email.toLowerCase(),
               emailVerified: false,
               image: imageString,
@@ -262,6 +264,8 @@ export default async function (fastify: TypedFastifyInstance) {
           200: z.object({
             id: z.string(),
             name: z.string(),
+            firstName: z.string(),
+            lastName: z.string(),
             email: z.email(),
             image: z.string().nullable(),
             emailVerified: z.boolean(),
@@ -323,6 +327,8 @@ export default async function (fastify: TypedFastifyInstance) {
           .update(user)
           .set({
             name: `${firstName} ${lastName}`,
+            firstName,
+            lastName,
             updatedAt: new Date().toISOString(),
           })
           .where(eq(user.id, userId))

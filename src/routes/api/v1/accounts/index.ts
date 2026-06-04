@@ -17,6 +17,8 @@ import { buildUserAccountsCacheKey } from "#/lib/user/index.ts";
 type UserSelect = {
   id: string;
   name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   image: string | null;
   emailVerified: boolean;
@@ -172,6 +174,8 @@ export default async function (fastify: TypedFastifyInstance) {
               .select({
                 id: user.id,
                 name: user.name,
+                firstName: user.firstName,
+                lastName: user.lastName,
                 email: user.email,
                 image: user.image,
                 emailVerified: user.emailVerified,
@@ -201,6 +205,8 @@ export default async function (fastify: TypedFastifyInstance) {
                   user: {
                     id: row.id,
                     name: row.name,
+                    firstName: row.firstName,
+                    lastName: row.lastName,
                     email: row.email,
                     image: row.image,
                     emailVerified: row.emailVerified,

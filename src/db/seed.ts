@@ -148,7 +148,7 @@ async function seed() {
       await database.insert(role).values({
         id: roleId,
         name: roleName,
-        isSystem: true,
+        isSystem: roleName === "Admin" ? true : false,
       });
 
       for (const perm of permissions) {
