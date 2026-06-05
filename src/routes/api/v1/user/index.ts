@@ -173,7 +173,9 @@ export default async function (fastify: TypedFastifyInstance) {
                 ? ".png"
                 : mimetype === "image/webp"
                   ? ".webp"
-                  : ".jpg";
+                  : mimetype === "image/jpeg"
+                    ? ".jpeg"
+                    : ".jpg";
             const uniqueFileName = `${Date.now()}_${firstName}_${lastName}${ext}`;
             const savePath = join(UPLOADS_DIR, uniqueFileName);
 
@@ -278,31 +280,31 @@ export default async function (fastify: TypedFastifyInstance) {
               example: "2024-01-01T00:00:00.000Z",
             }),
           }),
+          400: z.object({
+            error: z.string().meta({
+              description: "Bad request error message",
+            }),
+          }),
           401: z.object({
             error: z.string().meta({
               description: "Unauthorized error message",
-              example: "Unauthorized",
             }),
           }),
           403: z.object({
             error: z.string().meta({
               description: "Forbidden error message",
-              example: "Forbidden",
             }),
             message: z.string().optional(),
           }),
           500: z.object({
             error: z.string().meta({
               description: "Internal Server Error message",
-              example: "Internal Server Error",
             }),
           }),
         },
       },
     },
     async ({ body, headers }, reply) => {
-      console.log("🚀 ~ body:", body);
-
       const permissionResult = await accessPermissionCheck(
         headers,
         "user:update",
@@ -319,22 +321,96 @@ export default async function (fastify: TypedFastifyInstance) {
       }
 
       try {
-        // TODO: Implemet a user update
-        const { firstName, lastName, email, image, password, roleId, userId } =
-          body;
+        const { userId, image, password, ...payload } = body;
+        const updatedFields = { ...payload };
+        let imageString = null;
+        let newPassword = null;
 
-        const updateUser = await db
-          .update(user)
-          .set({
-            name: `${firstName} ${lastName}`,
-            firstName,
-            lastName,
-            updatedAt: new Date().toISOString(),
-          })
-          .where(eq(user.id, userId))
-          .returning();
+        if (image) {
+          const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"];
+          const meta = await fileTypeFromBuffer(image);
 
-        return reply.code(200).send(updateUser[0]);
+          let mimetype: string | null =
+            typeof meta?.mime === "string" ? meta.mime : null;
+
+          if (!mimetype && typeof meta?.ext === "string") {
+            const ext = meta.ext;
+            const extToMime: Record<string, string> = {
+              ".jpg": "image/jpeg",
+              ".jpeg": "image/jpeg",
+              ".png": "image/png",
+              ".webp": "image/webp",
+            };
+            mimetype = extToMime[ext] ?? null;
+          }
+
+          if (!mimetype || !allowedMimeTypes.includes(mimetype)) {
+            return reply.code(400).send({
+              error: "Invalid image format. Allowed types: JPEG, PNG, WebP",
+            });
+          }
+
+          try {
+            if (!fs.existsSync(UPLOADS_DIR)) {
+              fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+            }
+
+            const ext =
+              mimetype === "image/png"
+                ? ".png"
+                : mimetype === "image/webp"
+                  ? ".webp"
+                  : mimetype === "image/jpeg"
+                    ? ".jpeg"
+                    : ".jpg";
+            const uniqueFileName = `${Date.now()}_${updatedFields.firstName}_${updatedFields.lastName}${ext}`;
+            const savePath = join(UPLOADS_DIR, uniqueFileName);
+
+            await fs.promises.writeFile(savePath, image);
+
+            imageString = `/profile/${uniqueFileName}`;
+          } catch (error) {
+            console.error("Error saving image file:", error);
+            return reply.code(500).send({ error: "Failed to save image file" });
+          }
+        }
+
+        if (password) {
+          newPassword = await hash(password, argon2Options);
+        }
+
+        const updatedUser = await db.transaction(async (tx) => {
+          const [updateUser] = await tx
+            .update(user)
+            .set({
+              ...(updatedFields.firstName
+                ? {
+                    name: `${updatedFields.firstName} ${updatedFields.lastName}`,
+                  }
+                : {}),
+              ...(imageString ? { image: imageString } : {}),
+              ...updatedFields,
+              updatedAt: new Date().toISOString(),
+            })
+            .where(eq(user.id, userId))
+            .returning();
+
+          if (newPassword) {
+            await tx
+              .update(account)
+              .set({
+                password: newPassword,
+                updatedAt: new Date().toISOString(),
+              })
+              .where(eq(account.userId, userId));
+          }
+
+          return updateUser;
+        });
+
+        await fastify.cache.delByPrefix("user:accounts");
+
+        return reply.code(200).send(updatedUser);
       } catch (_error) {
         return reply.code(500).send({ error: "Internal Server Error" });
       }
