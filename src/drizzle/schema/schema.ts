@@ -207,7 +207,7 @@ export const rolePermission = pgTable(
   "role_permission",
   {
     id: text().primaryKey().notNull(),
-    roleId: text("role_id").notNull(),
+    roleId: text("role_id").references(() => role.id),
     resource: text().notNull(),
     action: actionEnum().notNull(),
     permission: text().notNull(),

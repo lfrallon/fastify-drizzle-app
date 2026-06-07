@@ -6,7 +6,34 @@ import { role, rolePermission } from "#/drizzle/schema/schema.ts";
 import { v4 } from "uuid";
 
 const DEFAULT_ROLES = {
+  System: [
+    {
+      resource: "user",
+      action: "create",
+      permission: "user:create",
+    },
+    {
+      resource: "user",
+      action: "read",
+      permission: "user:read",
+    },
+    {
+      resource: "user",
+      action: "update",
+      permission: "user:update",
+    },
+    {
+      resource: "user",
+      action: "delete",
+      permission: "user:delete",
+    },
+  ],
   Admin: [
+    {
+      resource: "user",
+      action: "create",
+      permission: "user:create",
+    },
     {
       resource: "user",
       action: "read",
@@ -148,7 +175,7 @@ async function seed() {
       await database.insert(role).values({
         id: roleId,
         name: roleName,
-        isSystem: roleName === "Admin" ? true : false,
+        isSystem: roleName === "System" ? true : false,
       });
 
       for (const perm of permissions) {
