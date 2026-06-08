@@ -53,6 +53,7 @@ export const user = pgTable(
   "user",
   {
     id: text().primaryKey().notNull(),
+    roleId: text("role_id").references(() => role.id),
     name: text().notNull(),
     firstName: text().notNull(),
     lastName: text().notNull(),
@@ -65,7 +66,6 @@ export const user = pgTable(
     updatedAt: timestamp("updated_at", { mode: "string" })
       .defaultNow()
       .notNull(),
-    roleId: text("role_id"),
   },
   (table) => [
     foreignKey({

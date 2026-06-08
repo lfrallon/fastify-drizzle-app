@@ -78,6 +78,7 @@ export default async function (fastify: TypedFastifyInstance) {
       }
     });
 
+  // POST /api/v1/user/create
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().post(
     "/create",
     {

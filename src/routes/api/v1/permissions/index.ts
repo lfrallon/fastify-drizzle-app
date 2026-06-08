@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gt, lt, or } from "drizzle-orm";
+import { v4 } from "uuid";
 import z from "zod";
 
 // db
@@ -125,6 +126,7 @@ export default async function (fastify: TypedFastifyInstance) {
                 roleId: rolePermission.roleId,
                 permission: rolePermission.permission,
                 createdAt: rolePermission.createdAt,
+                updatedAt: rolePermission.updatedAt,
                 role: {
                   id: role.id,
                   name: role.name,
@@ -140,10 +142,10 @@ export default async function (fastify: TypedFastifyInstance) {
                 cursor
                   ? or(
                       orderBy === "desc"
-                        ? lt(rolePermission.createdAt, cursor.updatedAt)
-                        : gt(rolePermission.createdAt, cursor.updatedAt),
+                        ? lt(rolePermission.updatedAt, cursor.updatedAt)
+                        : gt(rolePermission.updatedAt, cursor.updatedAt),
                       and(
-                        eq(rolePermission.createdAt, cursor.updatedAt),
+                        eq(rolePermission.updatedAt, cursor.updatedAt),
                         lt(rolePermission.id, cursor.id),
                       ),
                     )
@@ -152,8 +154,8 @@ export default async function (fastify: TypedFastifyInstance) {
               .limit(queryLimit)
               .orderBy(
                 orderBy === "desc"
-                  ? desc(rolePermission.createdAt)
-                  : asc(rolePermission.createdAt),
+                  ? desc(rolePermission.updatedAt)
+                  : asc(rolePermission.updatedAt),
                 orderBy === "desc"
                   ? desc(rolePermission.id)
                   : asc(rolePermission.id),
@@ -174,7 +176,7 @@ export default async function (fastify: TypedFastifyInstance) {
             ? {
                 id: currentPageItems[currentPageItems.length - 1].id,
                 updatedAt:
-                  currentPageItems[currentPageItems.length - 1].createdAt,
+                  currentPageItems[currentPageItems.length - 1].updatedAt,
               }
             : null;
         return reply.code(200).send({
@@ -185,6 +187,183 @@ export default async function (fastify: TypedFastifyInstance) {
             totalPages: Math.ceil(totalCount / clampedPageSize),
           },
           totalCount,
+        });
+      } catch (_error) {
+        return reply.code(500).send({ error: "Internal Server Error" });
+      }
+    },
+  );
+
+  // POST /api/v1/permissions/create
+  fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().post(
+    "/create",
+    {
+      schema: {
+        body: z.object({
+          resource: z
+            .string()
+            .min(2, "Resource is required")
+            .meta({ example: "user" }),
+          key: z
+            .string()
+            .min(2, "Key is required")
+            .meta({ example: "user:create" }),
+          action: z
+            .enum(["create", "read", "update", "delete"])
+            .meta({ example: "create | read | update | delete" }),
+          roleId: z
+            .string()
+            .meta({ example: "123e4567-e89b-12d3-a456-426614174000" }),
+        }),
+      },
+    },
+    async ({ headers, body }, reply) => {
+      const permissionResult = await accessPermissionCheck(
+        headers,
+        "user:create",
+      );
+      if (!permissionResult.currentUser || !permissionResult.session) {
+        const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
+
+        return reply.status(statusCode).send({
+          error: permissionResult.error,
+          ...(permissionResult.message
+            ? { message: permissionResult.message }
+            : {}),
+        });
+      }
+
+      if (permissionResult.currentUser.role !== "Admin") {
+        return reply.status(403).send({
+          error: "Forbidden",
+          message: "You do not have permission to access this resource.",
+        });
+      }
+
+      try {
+        const { action, key, resource, roleId } = body;
+
+        if (action.trim().length === 0) {
+          return reply.code(400).send({ error: "Action is required!" });
+        }
+
+        if (key.trim().length === 0) {
+          return reply.code(400).send({ error: "Key is required!" });
+        }
+
+        if (resource.trim().length === 0) {
+          return reply.code(400).send({ error: "Resource is required!" });
+        }
+
+        if (roleId.trim().length === 0) {
+          return reply.code(400).send({ error: "Role id is required!" });
+        }
+
+        const newPermission = await db.transaction(async (tx) => {
+          const [insertedPermission] = await tx
+            .insert(rolePermission)
+            .values({
+              id: v4(),
+              roleId,
+              action,
+              permission: key,
+              resource,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            })
+            .returning();
+
+          return insertedPermission;
+        });
+
+        // ✅ invalidate related read caches
+        await fastify.cache.delByPrefix("user:permissions");
+
+        return reply.code(201).send({
+          success: true,
+          permission: { id: newPermission.id, key: newPermission.permission },
+        });
+      } catch (_error) {
+        return reply.code(500).send({ error: "Internal Server Error" });
+      }
+    },
+  );
+
+  // POST /api/v1/permissions/update
+  fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().patch(
+    "/update",
+    {
+      schema: {
+        body: z.object({
+          id: z.string().min(2, "Permission id is required."),
+          resource: z
+            .string()
+            .min(2, "Resource")
+            .meta({ example: "user" })
+            .optional(),
+          key: z
+            .string()
+            .min(2, "Key")
+            .meta({ example: "user:create" })
+            .optional(),
+          action: z
+            .enum(["create", "read", "update", "delete"])
+            .meta({ example: "create | read | update | delete" })
+            .optional(),
+          roleId: z
+            .string()
+            .meta({ example: "123e4567-e89b-12d3-a456-426614174000" })
+            .optional(),
+        }),
+      },
+    },
+    async ({ headers, body }, reply) => {
+      const permissionResult = await accessPermissionCheck(
+        headers,
+        "user:update",
+      );
+      if (!permissionResult.currentUser || !permissionResult.session) {
+        const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
+
+        return reply.status(statusCode).send({
+          error: permissionResult.error,
+          ...(permissionResult.message
+            ? { message: permissionResult.message }
+            : {}),
+        });
+      }
+
+      try {
+        const { id, ...payload } = body;
+        const updatedFields = { ...payload };
+
+        if (id.trim().length === 0) {
+          return reply.code(400).send({ error: "Permission id is required!" });
+        }
+
+        const updatePermission = await db.transaction(async (tx) => {
+          const [updatePermission] = await tx
+            .update(rolePermission)
+            .set({
+              ...(updatedFields.key ? { permission: updatedFields.key } : {}),
+              ...updatedFields,
+              updatedAt: new Date().toISOString(),
+            })
+            .where(eq(rolePermission.id, id))
+            .returning();
+
+          return updatePermission;
+        });
+
+        // ✅ invalidate related read caches
+        await fastify.cache.delByPrefix("user:permissions");
+
+        return reply.code(201).send({
+          success: true,
+          permission: {
+            id: updatePermission.id,
+            key: updatePermission.permission,
+          },
         });
       } catch (error) {
         return reply.code(500).send({ error: "Internal Server Error" });
