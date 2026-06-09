@@ -16,10 +16,7 @@ import { argon2Options } from "#/lib/auth.ts";
 
 // types
 import type { FastifyRequest, FastifyReply } from "fastify";
-import type {
-  FastifyZodOpenApiSchema,
-  FastifyZodOpenApiTypeProvider,
-} from "fastify-zod-openapi";
+import type { FastifyZodOpenApiTypeProvider } from "fastify-zod-openapi";
 import type { TypedFastifyInstance } from "#/types/index.ts";
 
 const AccessResponseSchema = {
@@ -221,8 +218,9 @@ export default async function (fastify: TypedFastifyInstance) {
           return insertedUser;
         });
 
-        // ✅ invalidate related read caches
-        await fastify.cache.delByPrefix("user:accounts");
+        await fastify.cache.delByPrefix(
+          `user:accounts|userId:${permissionResult.session.user.id}|`,
+        );
 
         return reply.code(201).send({
           success: true,
@@ -409,7 +407,9 @@ export default async function (fastify: TypedFastifyInstance) {
           return updateUser;
         });
 
-        await fastify.cache.delByPrefix("user:accounts");
+        await fastify.cache.delByPrefix(
+          `user:accounts|userId:${permissionResult.session.user.id}|`,
+        );
 
         return reply.code(200).send(updatedUser);
       } catch (_error) {

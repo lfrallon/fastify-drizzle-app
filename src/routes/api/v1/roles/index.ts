@@ -233,14 +233,17 @@ export default async function (fastify: TypedFastifyInstance) {
 
             for (const p of permissions) {
               const permission = p.permission;
-              const existing = permissionsByRoleId.get(p.roleId);
 
-              if (existing) {
-                if (!existing.includes(permission)) {
-                  existing.push(permission);
+              if (p.roleId) {
+                const existing = permissionsByRoleId.get(p.roleId);
+
+                if (existing) {
+                  if (!existing.includes(permission)) {
+                    existing.push(permission);
+                  }
+                } else {
+                  permissionsByRoleId.set(p.roleId, [permission]);
                 }
-              } else {
-                permissionsByRoleId.set(p.roleId, [permission]);
               }
             }
 

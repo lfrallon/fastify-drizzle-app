@@ -276,8 +276,9 @@ export default async function (fastify: TypedFastifyInstance) {
           return insertedPermission;
         });
 
-        // ✅ invalidate related read caches
-        await fastify.cache.delByPrefix("user:permissions");
+        await fastify.cache.delByPrefix(
+          `user:permissions|userId:${permissionResult.session.user.id}|`,
+        );
 
         return reply.code(201).send({
           success: true,
@@ -355,8 +356,9 @@ export default async function (fastify: TypedFastifyInstance) {
           return updatePermission;
         });
 
-        // ✅ invalidate related read caches
-        await fastify.cache.delByPrefix("user:permissions");
+        await fastify.cache.delByPrefix(
+          `user:permissions|userId:${permissionResult.session.user.id}|`,
+        );
 
         return reply.code(201).send({
           success: true,
