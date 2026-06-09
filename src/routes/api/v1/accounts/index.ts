@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gt, inArray, lt, or } from "drizzle-orm";
+import { verify } from "@node-rs/argon2";
 import z from "zod";
 
 // types
@@ -7,10 +8,11 @@ import type { TypedFastifyInstance } from "#/types/index.ts";
 
 // db
 import { db } from "#/db/index.ts";
-import { role, rolePermission, user } from "#/drizzle/schema/index.ts";
+import { account, role, rolePermission, user } from "#/drizzle/schema/index.ts";
 
 // libs
 import { accessPermissionCheck } from "#/utils/rbac.ts";
+import { argon2Options } from "#/lib/auth.ts";
 import { buildUserAccountsCacheKey } from "#/lib/user/index.ts";
 
 // types
@@ -264,7 +266,104 @@ export default async function (fastify: TypedFastifyInstance) {
           },
           totalCount,
         });
-      } catch (error) {
+      } catch (_error) {
+        return reply.code(500).send({ error: "Internal Server Error" });
+      }
+    },
+  );
+
+  // DELETE /api/v1/accounts
+  fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().delete(
+    "",
+    {
+      schema: {
+        body: z.object({
+          userId: z.string().min(2, "User id is required."),
+          password: z
+            .string()
+            .min(8, `Confirm password must contain at least 8 characters.`)
+            .regex(
+              /[a-zA-Z]/,
+              `Confirm password must contain at least one letter.`,
+            )
+            .regex(
+              /[0-9]/,
+              `Confirm password must contain at least one number.`,
+            )
+            .regex(
+              /[^a-zA-Z0-9]/,
+              `Confirm password must contain at least one special character.`,
+            )
+            .trim(),
+        }),
+      },
+    },
+    async ({ headers, body }, reply) => {
+      const permissionResult = await accessPermissionCheck(
+        headers,
+        "user:delete",
+      );
+      if (!permissionResult.currentUser || !permissionResult.session) {
+        const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
+
+        return reply.status(statusCode).send({
+          error: permissionResult.error,
+          ...(permissionResult.message
+            ? { message: permissionResult.message }
+            : {}),
+        });
+      }
+
+      if (permissionResult.currentUser.role !== "Admin") {
+        return reply.status(403).send({
+          error: "Forbidden",
+          message: "You do not have permission to access this resource.",
+        });
+      }
+
+      try {
+        const { password, userId } = body;
+
+        if (password.trim().length === 0) {
+          return reply
+            .code(400)
+            .send({ error: "Password is required to proceed!" });
+        }
+
+        if (userId.trim().length === 0) {
+          return reply
+            .code(400)
+            .send({ error: "User id is required to proceed!" });
+        }
+
+        const [currentAccount] = await db
+          .select({
+            id: account.id,
+            userId: account.userId,
+            password: account.password,
+          })
+          .from(account)
+          .where(eq(account.userId, permissionResult.currentUser.id))
+          .limit(1);
+
+        if (!currentAccount) {
+          return reply.status(404).send({ error: "User not found!" });
+        }
+
+        const isValid = await verify(
+          currentAccount.password,
+          password,
+          argon2Options,
+        );
+
+        if (!isValid) {
+          return reply.status(401).send({ error: "Invalid password" });
+        }
+
+        await db.delete(user).where(eq(user.id, userId));
+
+        return reply.send({ message: "User successfully deleted" });
+      } catch (_error) {
         return reply.code(500).send({ error: "Internal Server Error" });
       }
     },
