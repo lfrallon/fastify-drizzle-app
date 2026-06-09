@@ -149,6 +149,7 @@ const DEFAULT_ROLES = {
       permission: "geo-notes:read",
     },
   ],
+  None: [],
 };
 
 async function seed() {

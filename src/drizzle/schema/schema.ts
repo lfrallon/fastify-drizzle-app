@@ -18,7 +18,7 @@ export const account = pgTable(
   {
     id: text().primaryKey().notNull(),
     scope: text(),
-    password: text(),
+    password: text().notNull(),
     accountId: text("account_id").notNull(),
     providerId: text("provider_id").notNull(),
     userId: text("user_id").notNull(),
