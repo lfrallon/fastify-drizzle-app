@@ -362,6 +362,10 @@ export default async function (fastify: TypedFastifyInstance) {
 
         await db.delete(user).where(eq(user.id, userId));
 
+        await fastify.cache.delByPrefix(
+          `user:accounts|userId:${permissionResult.session.user.id}|`,
+        );
+
         return reply.send({ message: "User successfully deleted" });
       } catch (_error) {
         return reply.code(500).send({ error: "Internal Server Error" });
