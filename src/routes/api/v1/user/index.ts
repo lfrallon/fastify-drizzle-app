@@ -97,7 +97,8 @@ export default async function (fastify: TypedFastifyInstance) {
               // Optional: Validate file size directly from the buffer (e.g., 5MB limit)
               const FIVE_MB = 5 * 1024 * 1024;
               return buffer.length <= FIVE_MB;
-            }, "Image must be smaller than 5MB"),
+            }, "Image must be smaller than 5MB")
+            .optional(),
         }),
       },
     },
@@ -248,17 +249,22 @@ export default async function (fastify: TypedFastifyInstance) {
             .optional(),
           roleId: z.string().optional(),
           image: z
-            .instanceof(Buffer, {
-              message: "Image must be a valid file buffer",
-            })
+            .union([
+              z
+                .instanceof(Buffer, {
+                  message: "Image must be a valid file buffer",
+                })
+                .refine((buffer) => {
+                  const FIVE_MB = 5 * 1024 * 1024;
+                  return buffer.length <= FIVE_MB;
+                }, "Image must be smaller than 5MB"),
+              z.string({ error: "Image must be a string or a buffer" }),
+            ])
             .meta({
-              description: "Optional user avatar image file buffer",
+              description:
+                "Optional user avatar image file buffer or string representation",
             })
-            .refine((buffer) => {
-              // Optional: Validate file size directly from the buffer (e.g., 5MB limit)
-              const FIVE_MB = 5 * 1024 * 1024;
-              return buffer.length <= FIVE_MB;
-            }, "Image must be smaller than 5MB")
+            .nullable()
             .optional(),
         }),
         response: {
@@ -325,7 +331,7 @@ export default async function (fastify: TypedFastifyInstance) {
         let imageString = null;
         let newPassword = null;
 
-        if (image) {
+        if (image && typeof image === "object") {
           const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"];
           const meta = await fileTypeFromBuffer(image);
 
@@ -387,7 +393,11 @@ export default async function (fastify: TypedFastifyInstance) {
                     name: `${updatedFields.firstName} ${updatedFields.lastName}`,
                   }
                 : {}),
-              ...(imageString ? { image: imageString } : {}),
+              ...(imageString
+                ? { image: imageString }
+                : image && typeof image === "string" && image === "null"
+                  ? { image: null }
+                  : {}),
               ...updatedFields,
               updatedAt: new Date().toISOString(),
             })
