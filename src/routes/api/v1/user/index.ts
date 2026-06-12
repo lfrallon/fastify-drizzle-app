@@ -254,11 +254,15 @@ export default async function (fastify: TypedFastifyInstance) {
                 .instanceof(Buffer, {
                   message: "Image must be a valid file buffer",
                 })
+                .meta({ description: "Image data buffer." })
                 .refine((buffer) => {
                   const FIVE_MB = 5 * 1024 * 1024;
                   return buffer.length <= FIVE_MB;
-                }, "Image must be smaller than 5MB"),
-              z.string({ error: "Image must be a string or a buffer" }),
+                }, "Image must be smaller than 5MB")
+                .optional(),
+              z.string({ error: "Image must be a string or a buffer" }).meta({
+                description: "A string representation value of 'null'.",
+              }),
             ])
             .meta({
               description:
