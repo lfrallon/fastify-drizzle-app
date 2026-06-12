@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, lt, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt, or } from "drizzle-orm";
 import { v4 } from "uuid";
 import z from "zod";
 
@@ -368,6 +368,72 @@ export default async function (fastify: TypedFastifyInstance) {
           },
         });
       } catch (error) {
+        return reply.code(500).send({ error: "Internal Server Error" });
+      }
+    },
+  );
+
+  // DELETE /api/v1/accounts/delete
+  fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().delete(
+    "/delete",
+    {
+      schema: {
+        body: z.object({
+          ids: z
+            .array(z.uuid(), {
+              error: "No id's provided.",
+            })
+            .meta({
+              description: "Permission id's",
+              example: ["123e4567-e89b-12d3-a456-426614174000"],
+            }),
+        }),
+      },
+    },
+    async ({ headers, body }, reply) => {
+      const permissionResult = await accessPermissionCheck(
+        headers,
+        "user:delete",
+      );
+      if (!permissionResult.currentUser || !permissionResult.session) {
+        const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
+
+        return reply.status(statusCode).send({
+          error: permissionResult.error,
+          ...(permissionResult.message
+            ? { message: permissionResult.message }
+            : {}),
+        });
+      }
+
+      try {
+        const { ids } = body;
+
+        if (!ids || ids.length === 0) {
+          return reply.code(400).send({ error: "No id's provided." });
+        }
+
+        const deletedPermissions = await db
+          .delete(rolePermission)
+          .where(inArray(rolePermission.id, ids))
+          .returning();
+
+        if (deletedPermissions.length === 0) {
+          return reply.code(404).send({ error: "Request not completed." });
+        }
+
+        await fastify.cache.delByPrefix(
+          `user:permissions|userId:${permissionResult.session.user.id}|`,
+        );
+
+        return reply.send({
+          message: `${deletedPermissions.length} item/s deleted successfully`,
+          deletedItems: deletedPermissions.map((item) => ({
+            id: item.id,
+            permission: item.permission,
+          })),
+        });
+      } catch (_error) {
         return reply.code(500).send({ error: "Internal Server Error" });
       }
     },
