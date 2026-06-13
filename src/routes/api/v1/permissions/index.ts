@@ -1,13 +1,15 @@
 import { and, asc, desc, eq, gt, inArray, lt, or } from "drizzle-orm";
+import { verify } from "@node-rs/argon2";
 import { v4 } from "uuid";
 import z from "zod";
 
 // db
 import { db } from "#/db/index.ts";
-import { role, rolePermission } from "#/drizzle/schema/index.ts";
+import { account, role, rolePermission } from "#/drizzle/schema/index.ts";
 
 // libs
 import { accessPermissionCheck } from "#/utils/rbac.ts";
+import { argon2Options } from "#/lib/auth.ts";
 import { buildUserPermissionsCacheKey } from "#/lib/permissions/index.ts";
 
 // types
@@ -373,7 +375,7 @@ export default async function (fastify: TypedFastifyInstance) {
     },
   );
 
-  // DELETE /api/v1/accounts/delete
+  // DELETE /api/v1/permissions/delete
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().delete(
     "/delete",
     {
@@ -387,6 +389,22 @@ export default async function (fastify: TypedFastifyInstance) {
               description: "Permission id's",
               example: ["123e4567-e89b-12d3-a456-426614174000"],
             }),
+          password: z
+            .string()
+            .min(8, `Confirm password must contain at least 8 characters.`)
+            .regex(
+              /[a-zA-Z]/,
+              `Confirm password must contain at least one letter.`,
+            )
+            .regex(
+              /[0-9]/,
+              `Confirm password must contain at least one number.`,
+            )
+            .regex(
+              /[^a-zA-Z0-9]/,
+              `Confirm password must contain at least one special character.`,
+            )
+            .trim(),
         }),
       },
     },
@@ -407,12 +425,43 @@ export default async function (fastify: TypedFastifyInstance) {
       }
 
       try {
-        const { ids } = body;
+        const { password, ids } = body;
+
+        if (password.trim().length === 0) {
+          return reply
+            .code(400)
+            .send({ error: "Password is required to proceed!" });
+        }
 
         if (!ids || ids.length === 0) {
           return reply.code(400).send({ error: "No id's provided." });
         }
 
+        const [currentAccount] = await db
+          .select({
+            id: account.id,
+            userId: account.userId,
+            password: account.password,
+          })
+          .from(account)
+          .where(eq(account.userId, permissionResult.currentUser.id))
+          .limit(1);
+
+        if (!currentAccount) {
+          return reply.status(404).send({ error: "User not found!" });
+        }
+
+        const isValid = await verify(
+          currentAccount.password,
+          password,
+          argon2Options,
+        );
+
+        if (!isValid) {
+          return reply.status(401).send({ error: "Invalid password" });
+        }
+
+        // TODO: Block permission request deletion if it is a system permission
         const deletedPermissions = await db
           .delete(rolePermission)
           .where(inArray(rolePermission.id, ids))
