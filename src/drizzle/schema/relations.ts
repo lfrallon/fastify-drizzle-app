@@ -5,8 +5,9 @@ import {
   account,
   session,
   geoNotes,
-  role,
-  rolePermission,
+  roles,
+  rolePermissions,
+  permissions,
 } from "./schema.ts";
 
 export const geoNotesRelations = relations(geoNotes, ({ one }) => ({
@@ -23,10 +24,14 @@ export const todosRelations = relations(todos, ({ one }) => ({
   }),
 }));
 
-export const userRelations = relations(user, ({ many }) => ({
+export const userRelations = relations(user, ({ many, one }) => ({
   todos: many(todos),
   accounts: many(account),
   sessions: many(session),
+  role: one(roles, {
+    fields: [user.roleId],
+    references: [roles.id],
+  }),
 }));
 
 export const accountRelations = relations(account, ({ one }) => ({
@@ -43,13 +48,25 @@ export const sessionRelations = relations(session, ({ one }) => ({
   }),
 }));
 
-export const roleRelations = relations(role, ({ many }) => ({
-  permissions: many(rolePermission),
+export const rolesRelations = relations(roles, ({ many }) => ({
+  rolePermissions: many(rolePermissions),
 }));
 
-export const rolePermissionRelations = relations(rolePermission, ({ one }) => ({
-  role: one(role, {
-    fields: [rolePermission.roleId],
-    references: [role.id],
-  }),
+export const permissionsRelations = relations(permissions, ({ many }) => ({
+  rolePermissions: many(rolePermissions),
 }));
+
+export const rolePermissionsRelations = relations(
+  rolePermissions,
+  ({ one }) => ({
+    role: one(roles, {
+      fields: [rolePermissions.roleId],
+      references: [roles.id],
+    }),
+
+    permission: one(permissions, {
+      fields: [rolePermissions.permissionId],
+      references: [permissions.id],
+    }),
+  }),
+);

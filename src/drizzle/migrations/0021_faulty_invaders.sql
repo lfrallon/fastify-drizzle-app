@@ -1,2 +1,0 @@
-ALTER TABLE "role_permission" ALTER COLUMN "role_id" DROP NOT NULL;--> statement-breakpoint
-ALTER TABLE "role_permission" ADD CONSTRAINT "role_permission_role_id_role_id_fk" FOREIGN KEY ("role_id") REFERENCES "public"."role"("id") ON DELETE no action ON UPDATE no action;

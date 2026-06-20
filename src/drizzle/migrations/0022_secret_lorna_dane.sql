@@ -1,1 +1,0 @@
-ALTER TABLE "account" ALTER COLUMN "password" SET NOT NULL;

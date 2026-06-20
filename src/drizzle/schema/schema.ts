@@ -11,6 +11,7 @@ import {
   uuid,
   uniqueIndex,
   pgEnum,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 
 export const account = pgTable(
@@ -52,13 +53,16 @@ export const account = pgTable(
 export const user = pgTable(
   "user",
   {
-    id: text().primaryKey().notNull(),
-    roleId: text("role_id").references(() => role.id),
-    name: text().notNull(),
-    firstName: text().notNull(),
-    lastName: text().notNull(),
-    email: text().notNull(),
-    image: text(),
+    id: text("id").primaryKey().notNull(),
+    roleId: uuid("role_id").references(() => roles.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
+    name: text("name").notNull(),
+    firstName: text("first_name").notNull(),
+    lastName: text("last_name").notNull(),
+    email: text("email").notNull(),
+    image: text("image"),
     emailVerified: boolean("email_verified").default(false).notNull(),
     createdAt: timestamp("created_at", { mode: "string" })
       .defaultNow()
@@ -67,15 +71,7 @@ export const user = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (table) => [
-    foreignKey({
-      columns: [table.roleId],
-      foreignColumns: [role.id],
-      name: "user_role_id_role_id_fk",
-    }).onDelete("set null"),
-    index("user_roleId_idx").on(table.roleId),
-    unique("user_email_unique").on(table.email),
-  ],
+  (table) => [unique("user_email_unique").on(table.email)],
 );
 
 export const verification = pgTable(
@@ -184,10 +180,17 @@ export const geoNotes = pgTable(
   ],
 );
 
-export const role = pgTable("role", {
-  id: text().primaryKey().notNull(),
-  name: text().notNull().unique(),
-  description: text(),
+export const actionEnum = pgEnum("action", [
+  "create",
+  "read",
+  "update",
+  "delete",
+]);
+
+export const roles = pgTable("roles", {
+  id: uuid("id").defaultRandom().primaryKey().notNull(),
+  name: text("name").notNull().unique(),
+  description: text("description"),
   isSystem: boolean("is_system").default(false).notNull(),
   createdAt: timestamp("created_at", { mode: "string" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "string" })
@@ -196,21 +199,13 @@ export const role = pgTable("role", {
     .notNull(),
 });
 
-export const actionEnum = pgEnum("action", [
-  "create",
-  "read",
-  "update",
-  "delete",
-]);
-
-export const rolePermission = pgTable(
-  "role_permission",
+export const permissions = pgTable(
+  "permissions",
   {
-    id: text().primaryKey().notNull(),
-    roleId: text("role_id").references(() => role.id),
-    resource: text().notNull(),
-    action: actionEnum().notNull(),
-    permission: text().notNull(),
+    id: uuid("id").defaultRandom().primaryKey().notNull(),
+    resource: text("resource").notNull(),
+    action: actionEnum("action").notNull(),
+    permission: text("permission").notNull().unique(),
     createdAt: timestamp("created_at", { mode: "string" })
       .defaultNow()
       .notNull(),
@@ -220,11 +215,36 @@ export const rolePermission = pgTable(
       .notNull(),
   },
   (table) => [
-    foreignKey({
-      columns: [table.roleId],
-      foreignColumns: [role.id],
-      name: "role_permission_role_id_fk",
-    }).onDelete("set null"),
-    unique("role_permission_unique").on(table.roleId, table.permission),
+    unique("permissions_resource_action_unique").on(
+      table.resource,
+      table.action,
+    ),
+  ],
+);
+
+export const rolePermissions = pgTable(
+  "role_permissions",
+  {
+    roleId: uuid("role_id")
+      .notNull()
+      .references(() => roles.id, {
+        onDelete: "cascade",
+      }),
+
+    permissionId: uuid("permission_id")
+      .notNull()
+      .references(() => permissions.id, {
+        onDelete: "cascade",
+      }),
+
+    createdAt: timestamp("created_at", { mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.roleId, table.permissionId],
+      name: "role_permissions_pk",
+    }),
   ],
 );
