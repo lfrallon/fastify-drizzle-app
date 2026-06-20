@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { anonymous } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { hash, verify, type Options } from "@node-rs/argon2";
 
@@ -20,6 +21,8 @@ const auth = betterAuth({
     provider: "pg", // or "pg" or "mysql"
     schema,
   }),
+  // TODO: Implement anonymous/guest session without logging in
+  plugins: [anonymous()],
   user: {
     changeEmail: {
       enabled: true,
