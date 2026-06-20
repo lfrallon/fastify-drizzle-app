@@ -1,9 +1,14 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { fromNodeHeaders } from "better-auth/node";
 
 // db
 import { db } from "#/db/index.ts";
-import { role, rolePermission, user } from "#/drizzle/schema/schema.ts";
+import {
+  roles,
+  permissions,
+  user,
+  rolePermissions,
+} from "#/drizzle/schema/schema.ts";
 
 // lib
 import auth from "#/lib/auth.ts";
@@ -15,36 +20,43 @@ export type Action = "create" | "read" | "update" | "delete";
 
 const rolePermissionsCache = new Map<
   string,
-  { permissions: string[]; expiresAt: number }
+  {
+    permissions: string[];
+    expiresAt: number;
+  }
 >();
 const CACHE_TTL_MS = 500;
 
-async function getRolePermissions(roleName: string): Promise<string[]> {
+async function getRolePermissions(roleId: string): Promise<string[]> {
   const now = Date.now();
-  const cached = rolePermissionsCache.get(roleName);
+  const cached = rolePermissionsCache.get(roleId);
 
   if (cached && cached.expiresAt > now) {
     return cached.permissions;
   }
 
   // Fetch from DB
-  const roleRecord = await db.query.role.findFirst({
-    where: eq(role.name, roleName),
+  const roleRecord = await db.query.roles.findFirst({
+    where: eq(roles.id, roleId),
+    with: {
+      rolePermissions: {
+        with: {
+          permission: true,
+        },
+      },
+    },
   });
 
   if (!roleRecord) {
     return [];
   }
 
-  const permissions = await db.query.rolePermission.findMany({
-    where: eq(rolePermission.roleId, roleRecord.id),
-    columns: { permission: true },
-  });
-
-  const permissionsList = permissions.map((p) => p.permission);
+  const permissionsList = roleRecord.rolePermissions.map(
+    (p) => p.permission.permission,
+  );
 
   // Cache the result
-  rolePermissionsCache.set(roleName, {
+  rolePermissionsCache.set(roleId, {
     permissions: permissionsList,
     expiresAt: now + CACHE_TTL_MS,
   });
@@ -70,32 +82,40 @@ async function getUserAccess(userId: string) {
   }
 
   const roleRecord = userRecord.roleId
-    ? await db.query.role.findFirst({
-        where: eq(role.id, userRecord.roleId),
+    ? await db.query.roles.findFirst({
+        where: eq(roles.id, userRecord.roleId),
         columns: {
           name: true,
+          id: true,
         },
       })
     : null;
 
-  const permissions = userRecord.roleId
-    ? await db.query.rolePermission.findMany({
-        where: eq(rolePermission.roleId, userRecord.roleId),
+  const rolePermissionIds = userRecord.roleId
+    ? await db.query.rolePermissions.findMany({
+        where: eq(rolePermissions.roleId, userRecord.roleId),
         columns: {
-          permission: true,
+          permissionId: true,
         },
       })
     : [];
 
+  const permissionIds = rolePermissionIds.map((p) => p.permissionId);
+
+  const permissionsList = await db.query.permissions.findMany({
+    where: inArray(permissions.id, permissionIds),
+  });
+
   return {
     role: roleRecord?.name || "Guest",
-    permissions: permissions.map((p) => p.permission),
+    roleId: roleRecord?.id,
+    permissions: permissionsList.map((p) => p.permission),
   };
 }
 
-export function invalidateRoleCache(roleName?: string) {
-  if (roleName) {
-    rolePermissionsCache.delete(roleName);
+export function invalidateRoleCache(roleId?: string) {
+  if (roleId) {
+    rolePermissionsCache.delete(roleId);
   } else {
     rolePermissionsCache.clear();
   }
@@ -126,20 +146,28 @@ export async function accessPermissionCheck(
   const { user } = session;
 
   const userAccess = await getUserAccess(user.id);
-  const userRole = userAccess.role;
   const customPermissions = userAccess.permissions;
 
-  const inheritedPermissions = await getRolePermissions(userRole);
+  if (!userAccess.roleId) {
+    return {
+      error: "Forbidden",
+      message: "Access Denied: You do not have access on this resource.",
+      statusCode: 403,
+    };
+  }
+
+  const inheritedPermissions = await getRolePermissions(userAccess.roleId);
+
   const allPermissions = [
     ...new Set([...inheritedPermissions, ...customPermissions]),
   ];
 
-  if (userRole === "Admin") {
+  if (userAccess.role === "Admin") {
     return {
       session,
       currentUser: {
         ...user,
-        role: userRole,
+        role: userAccess.role,
         permissions: allPermissions,
       },
     };
@@ -165,7 +193,7 @@ export async function accessPermissionCheck(
     session,
     currentUser: {
       ...user,
-      role: userRole,
+      role: userAccess.role,
       permissions: customPermissions,
     },
   };

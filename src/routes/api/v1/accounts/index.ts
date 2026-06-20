@@ -8,7 +8,7 @@ import type { TypedFastifyInstance } from "#/types/index.ts";
 
 // db
 import { db } from "#/db/index.ts";
-import { account, role, rolePermission, user } from "#/drizzle/schema/index.ts";
+import { account, roles, user } from "#/drizzle/schema/index.ts";
 
 // libs
 import { accessPermissionCheck } from "#/utils/rbac.ts";
@@ -33,6 +33,15 @@ interface UserAccountsNodes {
   user: UserSelect;
   role: string | null;
   permissions: string[];
+}
+
+interface PermissionRecord {
+  id: string;
+  resource: string;
+  action: "create" | "read" | "update" | "delete";
+  permission: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 const PositiveIntParam = z.coerce.number().int().min(1).max(200);
@@ -172,7 +181,7 @@ export default async function (fastify: TypedFastifyInstance) {
 
             const pageUserIds = pageUserRows.map((row) => row.id);
 
-            const usersCached = await db
+            const usersQuery = await db
               .select({
                 id: user.id,
                 name: user.name,
@@ -184,26 +193,50 @@ export default async function (fastify: TypedFastifyInstance) {
                 createdAt: user.createdAt,
                 updatedAt: user.updatedAt,
                 roleId: user.roleId,
-                roleName: role.name,
-                permission: rolePermission.permission,
+                roleName: roles.name,
               })
               .from(user)
-              .leftJoin(role, eq(user.roleId, role.id))
-              .leftJoin(rolePermission, eq(rolePermission.roleId, role.id))
+              .leftJoin(roles, eq(user.roleId, roles.id))
               .where(inArray(user.id, pageUserIds))
               .orderBy(
                 orderBy === "desc" ? desc(user.updatedAt) : asc(user.updatedAt),
                 orderBy === "desc" ? desc(user.id) : asc(user.id),
               );
 
-            const map = new Map<string, UserAccountsNodes>();
+            const pageRoleIds = usersQuery
+              .flatMap((item) => item.roleId)
+              .filter((p) => p !== null);
 
-            for (const row of usersCached) {
+            const rolesAndPermissionsQuery = await db.query.roles.findMany({
+              where: inArray(roles.id, pageRoleIds),
+              with: {
+                rolePermissions: {
+                  with: {
+                    permission: true,
+                  },
+                },
+              },
+            });
+
+            const mapUsers = new Map<string, UserAccountsNodes>();
+
+            for (const row of usersQuery) {
               const uid = row.id;
-              const perm = row.permission ?? null;
+              const roleId = row.roleId;
 
-              if (!map.has(uid)) {
-                map.set(uid, {
+              if (!mapUsers.has(uid)) {
+                const perms: string[] = [];
+
+                for (const perm of rolesAndPermissionsQuery) {
+                  if (perm.id === roleId) {
+                    const tempPerms = perm.rolePermissions.map(
+                      (p) => p.permission.permission,
+                    );
+                    perms.push(...tempPerms);
+                  }
+                }
+
+                mapUsers.set(uid, {
                   user: {
                     id: row.id,
                     name: row.name,
@@ -217,24 +250,18 @@ export default async function (fastify: TypedFastifyInstance) {
                     roleId: row.roleId,
                   },
                   role: row.roleName ?? null,
-                  permissions: perm ? [perm] : [],
+                  permissions: perms,
                 });
-              } else if (perm) {
-                const entry = map.get(uid)!;
-                if (!entry.permissions.includes(perm)) {
-                  entry.permissions.push(perm);
-                }
               }
             }
 
-            // preserve original ordering from pageUserRows
             const ordered: UserAccountsNodes[] = [];
             const seen = new Set<string>();
-            for (const row of pageUserRows) {
+            for (const row of usersQuery) {
               const uid = row.id;
               if (!seen.has(uid)) {
                 seen.add(uid);
-                const node = map.get(uid);
+                const node = mapUsers.get(uid);
                 if (node) ordered.push(node);
               }
             }

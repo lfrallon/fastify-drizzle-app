@@ -1,9 +1,10 @@
 import { and, asc, desc, eq, gt, inArray, lt, or } from "drizzle-orm";
+import { v4 } from "uuid";
 import z from "zod";
 
 // db
 import { db } from "#/db/index.ts";
-import { role, rolePermission, user } from "#/drizzle/schema/index.ts";
+import { roles, rolePermissions } from "#/drizzle/schema/index.ts";
 
 // libs
 import { accessPermissionCheck } from "#/utils/rbac.ts";
@@ -13,26 +14,23 @@ import { buildUserRolesCacheKey } from "#/lib/roles/index.ts";
 import type { TypedFastifyInstance } from "#/types/index.ts";
 import type { FastifyZodOpenApiTypeProvider } from "fastify-zod-openapi";
 
-type UserSelect = {
+type Permissions = {
   id: string;
-  name: string;
-  email: string;
-  image: string | null;
-  emailVerified: boolean;
   createdAt: string;
   updatedAt: string;
-  roleId: string | null;
+  action: "create" | "read" | "update" | "delete";
+  resource: string;
+  permission: string;
 };
 
-interface UserRolesNodes {
+interface RolesNodes {
   id: string;
   name: string;
   description: string | null;
   isSystem: boolean;
   createdAt: string;
   updatedAt: string;
-  users: UserSelect[];
-  permissions: string[];
+  permissions: Permissions[];
 }
 
 const PositiveIntParam = z.coerce.number().int().min(1).max(200);
@@ -127,7 +125,7 @@ export default async function (fastify: TypedFastifyInstance) {
           cursor,
         });
 
-        const totalCount = await db.$count(role);
+        const totalCount = await db.$count(roles);
 
         if (totalCount === 0) {
           return reply.code(200).send({
@@ -141,38 +139,36 @@ export default async function (fastify: TypedFastifyInstance) {
           });
         }
 
-        const getPaginatedUsers = await fastify.cache.wrap(
+        const getPaginatedRoles = await fastify.cache.wrap(
           cacheKey,
           300,
           async () => {
-            /**
-             * STEP 1
-             * PAGINATE ONLY ROLE IDS
-             */
             const pageRoleRows = await db
               .select({
-                id: role.id,
-                updatedAt: role.updatedAt,
+                id: roles.id,
+                updatedAt: roles.updatedAt,
               })
-              .from(role)
+              .from(roles)
               .where(
                 cursor
                   ? or(
                       orderBy === "desc"
-                        ? lt(role.updatedAt, cursor.updatedAt)
-                        : gt(role.updatedAt, cursor.updatedAt),
+                        ? lt(roles.updatedAt, cursor.updatedAt)
+                        : gt(roles.updatedAt, cursor.updatedAt),
                       and(
-                        eq(role.updatedAt, cursor.updatedAt),
+                        eq(roles.updatedAt, cursor.updatedAt),
                         orderBy === "desc"
-                          ? lt(role.id, cursor.id)
-                          : gt(role.id, cursor.id),
+                          ? lt(roles.id, cursor.id)
+                          : gt(roles.id, cursor.id),
                       ),
                     )
                   : undefined,
               )
               .orderBy(
-                orderBy === "desc" ? desc(role.updatedAt) : asc(role.updatedAt),
-                orderBy === "desc" ? desc(role.id) : asc(role.id),
+                orderBy === "desc"
+                  ? desc(roles.updatedAt)
+                  : asc(roles.updatedAt),
+                orderBy === "desc" ? desc(roles.id) : asc(roles.id),
               )
               .limit(queryLimit);
 
@@ -180,93 +176,52 @@ export default async function (fastify: TypedFastifyInstance) {
 
             const pageRoleIds = pageRoleRows.map((row) => row.id);
 
-            /**
-             * STEP 2
-             * FETCH ROLES
-             */
-            const roles = await db
+            const rolesQuery = await db
               .select()
-              .from(role)
-              .where(inArray(role.id, pageRoleIds));
+              .from(roles)
+              .where(inArray(roles.id, pageRoleIds));
 
-            /**
-             * STEP 3
-             * FETCH USERS SEPARATELY
-             */
-            const users = await db
-              .select()
-              .from(user)
-              .where(inArray(user.roleId, pageRoleIds));
+            const rolesAndPermissionsQuery = await db.query.roles.findMany({
+              where: inArray(roles.id, pageRoleIds),
+              with: {
+                rolePermissions: {
+                  with: {
+                    permission: true,
+                  },
+                },
+              },
+            });
 
-            /**
-             * STEP 4
-             * FETCH PERMISSIONS SEPARATELY
-             */
-            const permissions = await db
-              .select()
-              .from(rolePermission)
-              .where(inArray(rolePermission.roleId, pageRoleIds));
+            const permissionsByRoleId = new Map<string, Permissions[]>();
 
-            /**
-             * STEP 5
-             * CREATE LOOKUP MAPS
-             */
-            const usersByRoleId = new Map<string, typeof users>();
+            for (const role of rolesAndPermissionsQuery) {
+              const roles = role.rolePermissions;
 
-            for (const u of users) {
-              const roleId = u.roleId;
-
-              if (!roleId) {
-                continue;
-              }
-
-              const existing = usersByRoleId.get(roleId);
-
-              if (existing) {
-                existing.push(u);
-              } else {
-                usersByRoleId.set(roleId, [u]);
-              }
-            }
-
-            const permissionsByRoleId = new Map<string, string[]>();
-
-            for (const p of permissions) {
-              const permission = p.permission;
-
-              if (p.roleId) {
-                const existing = permissionsByRoleId.get(p.roleId);
-
-                if (existing) {
-                  if (!existing.includes(permission)) {
-                    existing.push(permission);
+              for (const r of roles) {
+                if (r.roleId) {
+                  const existing = permissionsByRoleId.get(r.roleId);
+                  if (existing) {
+                    if (!existing.includes(r.permission)) {
+                      existing.push(r.permission);
+                    }
+                  } else {
+                    permissionsByRoleId.set(r.roleId, [r.permission]);
                   }
-                } else {
-                  permissionsByRoleId.set(p.roleId, [permission]);
                 }
               }
             }
 
-            /**
-             * STEP 6
-             * CREATE ROLE LOOKUP
-             */
             const roleMap = new Map(
-              roles.map((r) => [
+              rolesQuery.map((r) => [
                 r.id,
                 {
                   ...r,
-                  users: usersByRoleId.get(r.id) ?? [],
                   permissions: permissionsByRoleId.get(r.id) ?? [],
                 },
               ]),
             );
 
-            /**
-             * STEP 7
-             * PRESERVE CURSOR ORDER
-             */
-            const ordered: UserRolesNodes[] = [];
+            const ordered: RolesNodes[] = [];
 
             const seen = new Set<string>();
 
@@ -286,11 +241,11 @@ export default async function (fastify: TypedFastifyInstance) {
           },
         );
 
-        const hasNextPage = getPaginatedUsers.length > clampedPageSize;
+        const hasNextPage = getPaginatedRoles.length > clampedPageSize;
 
         const currentPageItems = hasNextPage
-          ? getPaginatedUsers.slice(0, clampedPageSize)
-          : getPaginatedUsers;
+          ? getPaginatedRoles.slice(0, clampedPageSize)
+          : getPaginatedRoles;
 
         const newNextCursor =
           currentPageItems.length > 0
@@ -309,6 +264,244 @@ export default async function (fastify: TypedFastifyInstance) {
             totalPages: Math.ceil(totalCount / clampedPageSize),
           },
           totalCount,
+        });
+      } catch (error) {
+        return reply.code(500).send({ error: "Internal Server Error" });
+      }
+    },
+  );
+
+  // POST /api/v1/roles/create
+  fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().post(
+    "/create",
+    {
+      schema: {
+        body: z.object({
+          roleName: z.string().min(2, "Role name").meta({ example: "User" }),
+          description: z
+            .string()
+            .min(2, "Description")
+            .meta({ example: "Limitted system access." }),
+          permissions: z
+            .array(z.string())
+            .default([])
+            .optional()
+            .meta({ description: "Role permissions", example: "user:read" }),
+        }),
+      },
+    },
+    async ({ headers, body }, reply) => {
+      const permissionResult = await accessPermissionCheck(
+        headers,
+        "roles:update",
+      );
+      if (!permissionResult.currentUser || !permissionResult.session) {
+        const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
+
+        return reply.status(statusCode).send({
+          error: permissionResult.error,
+          ...(permissionResult.message
+            ? { message: permissionResult.message }
+            : {}),
+        });
+      }
+
+      try {
+        const { roleName, description, permissions } = body;
+
+        if (!roleName || roleName.trim().length === 0) {
+          return reply.code(400).send({ error: "Role name is required!" });
+        }
+
+        if (!description || description.trim().length === 0) {
+          return reply.code(400).send({ error: "Description is required!" });
+        }
+
+        const newRole = await db.transaction(async (tx) => {
+          const [insertedRole] = await tx
+            .insert(roles)
+            .values({
+              id: v4(),
+              name: roleName,
+              description,
+              isSystem: false,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            })
+            .returning();
+
+          if (permissions && permissions.length > 0) {
+            for (const perm of permissions) {
+              await tx.insert(rolePermissions).values({
+                roleId: insertedRole.id,
+                permissionId: perm.trim(),
+                createdAt: new Date().toISOString(),
+              });
+            }
+          }
+
+          return insertedRole;
+        });
+
+        await fastify.cache.delByPrefix(
+          `user:roles|userId:${permissionResult.session.user.id}|`,
+        );
+
+        return reply.code(201).send({
+          success: true,
+          role: { id: newRole.id, name: newRole.name },
+        });
+      } catch (_error) {
+        return reply.code(500).send({ error: "Internal Server Error" });
+      }
+    },
+  );
+
+  // PATCH /api/v1/roles/update
+  fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().patch(
+    "/update",
+    {
+      schema: {
+        body: z.object({
+          roleId: z.uuid().meta({ description: "Role id." }),
+          roleName: z
+            .string()
+            .min(2, "Role name")
+            .optional()
+            .meta({ example: "User" }),
+          description: z
+            .string()
+            .min(2, "Description")
+            .optional()
+            .meta({ example: "Limitted system access." }),
+          permissions: z
+            .union([
+              z.array(z.uuid()).meta({
+                description: "Role permissions",
+                example: "123e4567-e89b-12d3-a456-426614174000",
+              }),
+              z.null().meta({ description: "Remove all permission access." }),
+            ])
+            .optional()
+            .meta({
+              description: "Optional role permissions.",
+              example: `["user:create"] | "null" | []`,
+            }),
+        }),
+      },
+    },
+    async ({ headers, body }, reply) => {
+      const permissionResult = await accessPermissionCheck(
+        headers,
+        "roles:update",
+      );
+      if (!permissionResult.currentUser || !permissionResult.session) {
+        const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
+
+        return reply.status(statusCode).send({
+          error: permissionResult.error,
+          ...(permissionResult.message
+            ? { message: permissionResult.message }
+            : {}),
+        });
+      }
+
+      try {
+        const { roleId, description, roleName, permissions } = body;
+
+        if (!roleId || roleId.trim().length === 0) {
+          return reply
+            .code(400)
+            .send({ error: "Role id is required to proceed!" });
+        }
+
+        const updatedRolePermissions = await db.transaction(async (tx) => {
+          const [updateRolePermissions] = await tx
+            .update(roles)
+            .set({
+              ...(description ? { description } : {}),
+              ...(roleName ? { name: roleName } : {}),
+              updatedAt: new Date().toISOString(),
+            })
+            .where(eq(roles.id, roleId))
+            .returning();
+
+          if (permissions === null) {
+            const currentPermissions = await tx
+              .select({
+                permissionId: rolePermissions.permissionId,
+              })
+              .from(rolePermissions)
+              .where(eq(rolePermissions.roleId, roleId));
+
+            if (currentPermissions && currentPermissions.length === 0) return;
+
+            const toBeDeletedIds = currentPermissions.map(
+              (p) => p.permissionId,
+            );
+            await tx
+              .delete(rolePermissions)
+              .where(inArray(rolePermissions.permissionId, toBeDeletedIds));
+
+            await fastify.cache.delByPrefix(
+              `user:permissions|userId:${permissionResult.session.user.id}|`,
+            );
+          }
+
+          if (
+            typeof permissions === "object" &&
+            permissions &&
+            permissions.length > 0
+          ) {
+            const queryCurrentPerms = await tx
+              .select({
+                permissionId: rolePermissions.permissionId,
+              })
+              .from(rolePermissions)
+              .where(eq(rolePermissions.roleId, roleId));
+
+            const currentPermissions = queryCurrentPerms.map(
+              (p) => p.permissionId,
+            );
+
+            const toAddPermissions = permissions.filter(
+              (newPerms) => !currentPermissions.includes(newPerms),
+            );
+
+            const toRemovePermissions = currentPermissions.filter(
+              (rmPerms) => !permissions.includes(rmPerms),
+            );
+
+            if (toRemovePermissions.length > 0) {
+              await tx
+                .delete(rolePermissions)
+                .where(
+                  inArray(rolePermissions.permissionId, toRemovePermissions),
+                );
+            }
+
+            if (toAddPermissions.length > 0) {
+              for (const perm of toAddPermissions) {
+                if (perm) {
+                  await tx.insert(rolePermissions).values({
+                    permissionId: perm,
+                    roleId: roleId,
+                    createdAt: new Date().toISOString(),
+                  });
+                }
+              }
+            }
+          }
+          return updateRolePermissions;
+        });
+
+        await fastify.cache.delByPrefix(
+          `user:roles|userId:${permissionResult.session.user.id}|`,
+        );
+
+        return reply.code(201).send({
+          success: true,
+          role: updatedRolePermissions,
         });
       } catch (error) {
         return reply.code(500).send({ error: "Internal Server Error" });

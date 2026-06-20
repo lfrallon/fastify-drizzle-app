@@ -5,7 +5,7 @@ import z from "zod";
 
 // db
 import { db } from "#/db/index.ts";
-import { account, role, rolePermission } from "#/drizzle/schema/index.ts";
+import { account, permissions } from "#/drizzle/schema/index.ts";
 
 // libs
 import { accessPermissionCheck } from "#/utils/rbac.ts";
@@ -104,7 +104,7 @@ export default async function (fastify: TypedFastifyInstance) {
           cursor,
         });
 
-        const totalCount = await db.$count(rolePermission);
+        const totalCount = await db.$count(permissions);
 
         if (totalCount === 0) {
           return reply.code(200).send({
@@ -124,31 +124,23 @@ export default async function (fastify: TypedFastifyInstance) {
           async () => {
             const rolePermissionCached = await db
               .select({
-                id: rolePermission.id,
-                roleId: rolePermission.roleId,
-                permission: rolePermission.permission,
-                createdAt: rolePermission.createdAt,
-                updatedAt: rolePermission.updatedAt,
-                role: {
-                  id: role.id,
-                  name: role.name,
-                  description: role.description,
-                  isSystem: role.isSystem,
-                  createdAt: role.createdAt,
-                  updatedAt: role.updatedAt,
-                },
+                id: permissions.id,
+                createdAt: permissions.createdAt,
+                updatedAt: permissions.updatedAt,
+                action: permissions.action,
+                resource: permissions.resource,
+                permission: permissions.permission,
               })
-              .from(rolePermission)
-              .leftJoin(role, eq(rolePermission.roleId, role.id))
+              .from(permissions)
               .where(
                 cursor
                   ? or(
                       orderBy === "desc"
-                        ? lt(rolePermission.updatedAt, cursor.updatedAt)
-                        : gt(rolePermission.updatedAt, cursor.updatedAt),
+                        ? lt(permissions.updatedAt, cursor.updatedAt)
+                        : gt(permissions.updatedAt, cursor.updatedAt),
                       and(
-                        eq(rolePermission.updatedAt, cursor.updatedAt),
-                        lt(rolePermission.id, cursor.id),
+                        eq(permissions.updatedAt, cursor.updatedAt),
+                        lt(permissions.id, cursor.id),
                       ),
                     )
                   : undefined,
@@ -156,11 +148,9 @@ export default async function (fastify: TypedFastifyInstance) {
               .limit(queryLimit)
               .orderBy(
                 orderBy === "desc"
-                  ? desc(rolePermission.updatedAt)
-                  : asc(rolePermission.updatedAt),
-                orderBy === "desc"
-                  ? desc(rolePermission.id)
-                  : asc(rolePermission.id),
+                  ? desc(permissions.updatedAt)
+                  : asc(permissions.updatedAt),
+                orderBy === "desc" ? desc(permissions.id) : asc(permissions.id),
               );
 
             return rolePermissionCached;
@@ -213,9 +203,6 @@ export default async function (fastify: TypedFastifyInstance) {
           action: z
             .enum(["create", "read", "update", "delete"])
             .meta({ example: "create | read | update | delete" }),
-          roleId: z
-            .string()
-            .meta({ example: "123e4567-e89b-12d3-a456-426614174000" }),
         }),
       },
     },
@@ -243,7 +230,7 @@ export default async function (fastify: TypedFastifyInstance) {
       }
 
       try {
-        const { action, key, resource, roleId } = body;
+        const { action, key, resource } = body;
 
         if (action.trim().length === 0) {
           return reply.code(400).send({ error: "Action is required!" });
@@ -257,16 +244,11 @@ export default async function (fastify: TypedFastifyInstance) {
           return reply.code(400).send({ error: "Resource is required!" });
         }
 
-        if (roleId.trim().length === 0) {
-          return reply.code(400).send({ error: "Role id is required!" });
-        }
-
         const newPermission = await db.transaction(async (tx) => {
           const [insertedPermission] = await tx
-            .insert(rolePermission)
+            .insert(permissions)
             .values({
               id: v4(),
-              roleId,
               action,
               permission: key,
               resource,
@@ -346,13 +328,13 @@ export default async function (fastify: TypedFastifyInstance) {
 
         const updatePermission = await db.transaction(async (tx) => {
           const [updatePermission] = await tx
-            .update(rolePermission)
+            .update(permissions)
             .set({
               ...(updatedFields.key ? { permission: updatedFields.key } : {}),
               ...updatedFields,
               updatedAt: new Date().toISOString(),
             })
-            .where(eq(rolePermission.id, id))
+            .where(eq(permissions.id, id))
             .returning();
 
           return updatePermission;
@@ -463,8 +445,8 @@ export default async function (fastify: TypedFastifyInstance) {
 
         // TODO: Block permission request deletion if it is a system permission
         const deletedPermissions = await db
-          .delete(rolePermission)
-          .where(inArray(rolePermission.id, ids))
+          .delete(permissions)
+          .where(inArray(permissions.id, ids))
           .returning();
 
         if (deletedPermissions.length === 0) {
