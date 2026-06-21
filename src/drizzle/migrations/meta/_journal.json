@@ -15,6 +15,13 @@
       "when": 1781518243525,
       "tag": "0001_brainy_network",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782009061015,
+      "tag": "0002_clumsy_pixie",
+      "breakpoints": true
     }
   ]
 }

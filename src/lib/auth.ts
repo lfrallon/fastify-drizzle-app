@@ -1,11 +1,13 @@
 import { betterAuth } from "better-auth";
 import { anonymous } from "better-auth/plugins";
+import { eq } from "drizzle-orm";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { hash, verify, type Options } from "@node-rs/argon2";
 
 // db
 import { db } from "#/db/index.ts";
 import * as schema from "#/drizzle/schema/index.ts";
+import { user } from "#/drizzle/schema/index.ts";
 
 export const argon2Options: Options = {
   memoryCost: 65536, // 64 MiB
@@ -23,6 +25,34 @@ const auth = betterAuth({
   }),
   // TODO: Implement anonymous/guest session without logging in
   plugins: [anonymous()],
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => {
+          return {
+            data: {
+              ...user,
+              firstName: user.firstName || "Guest",
+              lastName: user.lastName || "User",
+            },
+          };
+        },
+      },
+    },
+    session: {
+      delete: {
+        before: async (session) => {
+          const targetUser = await db.query.user.findFirst({
+            where: eq(user.id, session.userId),
+          });
+
+          if (targetUser?.isAnonymous) {
+            await db.delete(user).where(eq(user.id, session.userId));
+          }
+        },
+      },
+    },
+  },
   user: {
     changeEmail: {
       enabled: true,
@@ -35,6 +65,7 @@ const auth = betterAuth({
   },
   emailAndPassword: {
     enabled: true,
+    autoSignIn: true,
     password: {
       hash: async (password: string) => {
         return await hash(password, argon2Options);
