@@ -23,7 +23,6 @@ const auth = betterAuth({
     provider: "pg", // or "pg" or "mysql"
     schema,
   }),
-  // TODO: Implement anonymous/guest session without logging in
   plugins: [anonymous()],
   databaseHooks: {
     user: {
