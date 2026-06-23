@@ -9,11 +9,13 @@ import { roles, rolePermissions, account } from "#/drizzle/schema/index.ts";
 
 // libs
 import { argon2Options } from "#/lib/auth.ts";
-import { accessPermissionCheck } from "#/utils/rbac.ts";
 import { buildUserRolesCacheKey } from "#/lib/roles/index.ts";
 
+// middleware
+import { requirePermission } from "#/middleware/requirePermission.ts";
+
 // types
-import type { TypedFastifyInstance } from "#/types/index.ts";
+import type { TypedFastifyInstance } from "#/types/fastify.js";
 import type { FastifyZodOpenApiTypeProvider } from "fastify-zod-openapi";
 
 type Permissions = {
@@ -75,27 +77,13 @@ export default async function (fastify: TypedFastifyInstance) {
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().get(
     "",
     {
+      preHandler: requirePermission("roles:read"),
       schema: {
         querystring: CursorPaginationQuerySchema,
       },
     },
-    async function ({ headers, query }, reply) {
-      const permissionResult = await accessPermissionCheck(
-        headers,
-        "user:read",
-      );
-      if (!permissionResult.currentUser || !permissionResult.session) {
-        const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
-
-        return reply.status(statusCode).send({
-          error: permissionResult.error,
-          ...(permissionResult.message
-            ? { message: permissionResult.message }
-            : {}),
-        });
-      }
-
-      if (permissionResult.currentUser.role !== "Admin") {
+    async function ({ query, currentUser, session }, reply) {
+      if (currentUser.role !== "Admin") {
         return reply.status(403).send({
           error: "Forbidden",
           message: "You do not have permission to access this resource.",
@@ -121,7 +109,7 @@ export default async function (fastify: TypedFastifyInstance) {
         const queryLimit = clampedPageSize + 1;
 
         const cacheKey = buildUserRolesCacheKey({
-          userId: permissionResult.session.user.id,
+          userId: session.user.id,
           clampedPageSize,
           orderBy,
           cursor,
@@ -277,6 +265,7 @@ export default async function (fastify: TypedFastifyInstance) {
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().post(
     "/create",
     {
+      preHandler: requirePermission("roles:create"),
       schema: {
         body: z.object({
           roleName: z.string().min(2, "Role name").meta({ example: "User" }),
@@ -292,22 +281,7 @@ export default async function (fastify: TypedFastifyInstance) {
         }),
       },
     },
-    async ({ headers, body }, reply) => {
-      const permissionResult = await accessPermissionCheck(
-        headers,
-        "roles:update",
-      );
-      if (!permissionResult.currentUser || !permissionResult.session) {
-        const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
-
-        return reply.status(statusCode).send({
-          error: permissionResult.error,
-          ...(permissionResult.message
-            ? { message: permissionResult.message }
-            : {}),
-        });
-      }
-
+    async ({ session, body }, reply) => {
       try {
         const { roleName, description, permissions } = body;
 
@@ -346,7 +320,7 @@ export default async function (fastify: TypedFastifyInstance) {
         });
 
         await fastify.cache.delByPrefix(
-          `user:roles|userId:${permissionResult.session.user.id}|`,
+          `user:roles|userId:${session.user.id}|`,
         );
 
         return reply.code(201).send({
@@ -363,6 +337,7 @@ export default async function (fastify: TypedFastifyInstance) {
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().patch(
     "/update",
     {
+      preHandler: requirePermission("roles:update"),
       schema: {
         body: z.object({
           roleId: z.uuid().meta({ description: "Role id." }),
@@ -392,22 +367,7 @@ export default async function (fastify: TypedFastifyInstance) {
         }),
       },
     },
-    async ({ headers, body }, reply) => {
-      const permissionResult = await accessPermissionCheck(
-        headers,
-        "roles:update",
-      );
-      if (!permissionResult.currentUser || !permissionResult.session) {
-        const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
-
-        return reply.status(statusCode).send({
-          error: permissionResult.error,
-          ...(permissionResult.message
-            ? { message: permissionResult.message }
-            : {}),
-        });
-      }
-
+    async ({ session, body }, reply) => {
       try {
         const { roleId, description, roleName, permissions } = body;
 
@@ -446,7 +406,7 @@ export default async function (fastify: TypedFastifyInstance) {
               .where(inArray(rolePermissions.permissionId, toBeDeletedIds));
 
             await fastify.cache.delByPrefix(
-              `user:permissions|userId:${permissionResult.session.user.id}|`,
+              `user:permissions|userId:${session.user.id}|`,
             );
           }
 
@@ -498,7 +458,7 @@ export default async function (fastify: TypedFastifyInstance) {
         });
 
         await fastify.cache.delByPrefix(
-          `user:roles|userId:${permissionResult.session.user.id}|`,
+          `user:roles|userId:${session.user.id}|`,
         );
 
         return reply.code(201).send({
@@ -515,6 +475,7 @@ export default async function (fastify: TypedFastifyInstance) {
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().delete(
     "/delete",
     {
+      preHandler: requirePermission("roles:delete"),
       schema: {
         body: z.object({
           ids: z
@@ -544,23 +505,8 @@ export default async function (fastify: TypedFastifyInstance) {
         }),
       },
     },
-    async ({ body, headers }, reply) => {
+    async ({ body, currentUser, session }, reply) => {
       try {
-        const permissionResult = await accessPermissionCheck(
-          headers,
-          "roles:delete",
-        );
-        if (!permissionResult.currentUser || !permissionResult.session) {
-          const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
-
-          return reply.status(statusCode).send({
-            error: permissionResult.error,
-            ...(permissionResult.message
-              ? { message: permissionResult.message }
-              : {}),
-          });
-        }
-
         const { password, ids } = body;
 
         if (password.trim().length === 0) {
@@ -580,7 +526,7 @@ export default async function (fastify: TypedFastifyInstance) {
             password: account.password,
           })
           .from(account)
-          .where(eq(account.userId, permissionResult.currentUser.id))
+          .where(eq(account.userId, currentUser.id))
           .limit(1);
 
         if (!currentAccount) {
@@ -607,7 +553,7 @@ export default async function (fastify: TypedFastifyInstance) {
         }
 
         await fastify.cache.delByPrefix(
-          `user:roles|userId:${permissionResult.session.user.id}|`,
+          `user:roles|userId:${session.user.id}|`,
         );
 
         return reply.send({

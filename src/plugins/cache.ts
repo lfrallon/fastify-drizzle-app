@@ -7,18 +7,6 @@ import { redis } from "#/db/redis.ts";
 // types
 import type { FastifyInstance } from "fastify";
 
-declare module "fastify" {
-  interface FastifyInstance {
-    cache: {
-      get<T>(key: string): Promise<T | null>;
-      set(key: string, value: unknown, ttl?: number): Promise<void>;
-      del(key: string): Promise<void>;
-      delByPrefix(prefix: string): Promise<void>;
-      wrap<T>(key: string, ttl: number, fn: () => Promise<T>): Promise<T>;
-    };
-  }
-}
-
 export default fp(async (fastify: FastifyInstance) => {
   fastify.decorate("cache", {
     async get<T>(key: string): Promise<T | null> {

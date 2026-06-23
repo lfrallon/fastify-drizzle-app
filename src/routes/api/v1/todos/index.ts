@@ -6,18 +6,21 @@ import { db } from "#/db/index.ts";
 import { todos } from "#/drizzle/schema/schema.ts";
 
 // libs
-import { accessPermissionCheck } from "#/utils/rbac.ts";
 import { buildTodosCacheKey } from "#/lib/todos/index.ts";
+
+// middleware
+import { requirePermission } from "#/middleware/requirePermission.ts";
 
 // types
 import type { FastifyZodOpenApiTypeProvider } from "fastify-zod-openapi";
-import type { TypedFastifyInstance } from "#/types/index.ts";
+import type { TypedFastifyInstance } from "#/types/fastify.js";
 
 export default async function (fastify: TypedFastifyInstance) {
   // GET /api/v1/todos
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().get(
     "",
     {
+      preHandler: requirePermission("todos:read"),
       schema: {
         querystring: z
           .object({
@@ -53,20 +56,7 @@ export default async function (fastify: TypedFastifyInstance) {
           }),
       },
     },
-    async function ({ headers, query }, reply) {
-      const permissionResult = await accessPermissionCheck(
-        headers,
-        "todos:read",
-      );
-      if (!permissionResult.currentUser || !permissionResult.session) {
-        return reply.status(permissionResult.statusCode).send({
-          error: permissionResult.error,
-          ...(permissionResult.message
-            ? { message: permissionResult.message }
-            : {}),
-        });
-      }
-
+    async function ({ query, session }, reply) {
       try {
         const { updatedAt, id, pageSize, orderBy, limit } = query;
 
@@ -83,7 +73,7 @@ export default async function (fastify: TypedFastifyInstance) {
         const queryLimit = clampedPageSize + 1;
 
         const cacheKey = buildTodosCacheKey({
-          userId: permissionResult.session.user.id,
+          userId: session.user.id,
           clampedPageSize,
           orderBy,
           cursor,
@@ -91,7 +81,7 @@ export default async function (fastify: TypedFastifyInstance) {
 
         const totalCount = await db.$count(
           todos,
-          eq(todos.userId, permissionResult.session.user.id),
+          eq(todos.userId, session.user.id),
         );
 
         if (totalCount === 0) {
@@ -115,7 +105,7 @@ export default async function (fastify: TypedFastifyInstance) {
               .from(todos)
               .where(
                 and(
-                  eq(todos.userId, permissionResult.session.user.id),
+                  eq(todos.userId, session.user.id),
                   cursor
                     ? or(
                         orderBy === "desc"
@@ -175,6 +165,7 @@ export default async function (fastify: TypedFastifyInstance) {
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().post(
     "/add",
     {
+      preHandler: requirePermission("todos:create"),
       schema: {
         body: z.object({
           title: z
@@ -183,35 +174,20 @@ export default async function (fastify: TypedFastifyInstance) {
         }),
       },
     },
-    async ({ body, headers }, reply) => {
-      const permissionResult = await accessPermissionCheck(
-        headers,
-        "todos:create",
-      );
-      if (!permissionResult.currentUser || !permissionResult.session) {
-        return reply.status(permissionResult.statusCode).send({
-          error: permissionResult.error,
-          ...(permissionResult.message
-            ? { message: permissionResult.message }
-            : {}),
-        });
-      }
-
-      const { title } = body;
-
-      if (!title || title.length === 0) {
-        return reply.code(400).send({ error: "No title provided!" });
-      }
-
+    async ({ body, session }, reply) => {
       try {
+        const { title } = body;
+
+        if (!title || title.length === 0) {
+          return reply.code(400).send({ error: "No title provided!" });
+        }
+
         const addedTodo = await db
           .insert(todos)
-          .values({ title, userId: permissionResult.session.user.id })
+          .values({ title, userId: session.user.id })
           .returning();
 
-        await fastify.cache.delByPrefix(
-          `todos:|userId:${permissionResult.session.user.id}|`,
-        );
+        await fastify.cache.delByPrefix(`todos:|userId:${session.user.id}|`);
 
         return reply.send(addedTodo[0]);
       } catch (error) {
@@ -224,6 +200,7 @@ export default async function (fastify: TypedFastifyInstance) {
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().delete(
     "",
     {
+      preHandler: requirePermission("todos:delete"),
       schema: {
         body: z.object({
           ids: z
@@ -237,44 +214,23 @@ export default async function (fastify: TypedFastifyInstance) {
         }),
       },
     },
-    async ({ body, headers }, reply) => {
-      const permissionResult = await accessPermissionCheck(
-        headers,
-        "todos:delete",
-      );
-      if (!permissionResult.currentUser || !permissionResult.session) {
-        return reply.status(permissionResult.statusCode).send({
-          error: permissionResult.error,
-          ...(permissionResult.message
-            ? { message: permissionResult.message }
-            : {}),
-        });
-      }
-
-      const { ids } = body;
-
-      if (!ids || ids.length === 0) {
-        return reply.code(400).send({ error: "No id's provided." });
-      }
-
+    async ({ body, session }, reply) => {
       try {
+        const { ids } = body;
+
+        if (!ids || ids.length === 0) {
+          return reply.code(400).send({ error: "No id's provided." });
+        }
         const deletedTodos = await db
           .delete(todos)
-          .where(
-            and(
-              eq(todos.userId, permissionResult.session.user.id),
-              inArray(todos.id, ids),
-            ),
-          )
+          .where(and(eq(todos.userId, session.user.id), inArray(todos.id, ids)))
           .returning();
 
         if (deletedTodos.length === 0) {
           return reply.code(404).send({ error: "Request not completed." });
         }
 
-        await fastify.cache.delByPrefix(
-          `todos:|userId:${permissionResult.session.user.id}|`,
-        );
+        await fastify.cache.delByPrefix(`todos:|userId:${session.user.id}|`);
 
         return reply.send({
           message: `${deletedTodos.length} item/s deleted successfully`,
@@ -293,6 +249,7 @@ export default async function (fastify: TypedFastifyInstance) {
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().put(
     "/update",
     {
+      preHandler: requirePermission("todos:update"),
       schema: {
         body: z.array(
           z
@@ -321,20 +278,7 @@ export default async function (fastify: TypedFastifyInstance) {
         ),
       },
     },
-    async ({ body, headers }, reply) => {
-      const permissionResult = await accessPermissionCheck(
-        headers,
-        "todos:update",
-      );
-      if (!permissionResult.currentUser || !permissionResult.session) {
-        return reply.status(permissionResult.statusCode).send({
-          error: permissionResult.error,
-          ...(permissionResult.message
-            ? { message: permissionResult.message }
-            : {}),
-        });
-      }
-
+    async ({ body, session }, reply) => {
       try {
         const updatedTodos = [];
 
@@ -344,12 +288,7 @@ export default async function (fastify: TypedFastifyInstance) {
           const existingTodo = await db
             .select()
             .from(todos)
-            .where(
-              and(
-                eq(todos.id, id),
-                eq(todos.userId, permissionResult.session.user.id),
-              ),
-            )
+            .where(and(eq(todos.id, id), eq(todos.userId, session.user.id)))
             .limit(1)
             .then((rows) => rows[0] || undefined);
 
@@ -378,9 +317,7 @@ export default async function (fastify: TypedFastifyInstance) {
           });
         }
 
-        await fastify.cache.delByPrefix(
-          `todos:|userId:${permissionResult.session.user.id}|`,
-        );
+        await fastify.cache.delByPrefix(`todos:|userId:${session.user.id}|`);
 
         return reply.send({
           message: `${updatedTodos.length} item/s updated successfully`,

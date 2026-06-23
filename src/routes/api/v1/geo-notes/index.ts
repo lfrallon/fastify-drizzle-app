@@ -12,8 +12,11 @@ import { accessPermissionCheck } from "#/utils/rbac.ts";
 import { db } from "#/db/index.ts";
 import { geoNotes } from "#/drizzle/schema/schema.ts";
 
+// middleware
+import { requirePermission } from "#/middleware/requirePermission.ts";
+
 // types
-import type { TypedFastifyInstance } from "#/types/index.ts";
+import type { TypedFastifyInstance } from "#/types/fastify.js";
 import type { FastifyZodOpenApiTypeProvider } from "fastify-zod-openapi";
 
 export default async function (fastify: TypedFastifyInstance) {
@@ -289,28 +292,28 @@ export default async function (fastify: TypedFastifyInstance) {
       },
     },
     async ({ body, headers }, reply) => {
-      const permissionResult = await accessPermissionCheck(
-        headers,
-        "geo-notes:create",
-      );
-
-      const { title, geoNote, latitude, longitude, videoUrl } = body;
-
-      if (!title || title.length === 0) {
-        return reply.code(400).send({ error: "No title provided!" });
-      }
-
-      if (!geoNote || geoNote.length === 0) {
-        return reply.code(400).send({ error: "No map message provided!" });
-      }
-
-      if (latitude === undefined || longitude === undefined) {
-        return reply
-          .code(400)
-          .send({ error: "Latitude and longitude are required!" });
-      }
-
       try {
+        const permissionResult = await accessPermissionCheck(
+          headers,
+          "geo-notes:create",
+        );
+
+        const { title, geoNote, latitude, longitude, videoUrl } = body;
+
+        if (!title || title.length === 0) {
+          return reply.code(400).send({ error: "No title provided!" });
+        }
+
+        if (!geoNote || geoNote.length === 0) {
+          return reply.code(400).send({ error: "No map message provided!" });
+        }
+
+        if (latitude === undefined || longitude === undefined) {
+          return reply
+            .code(400)
+            .send({ error: "Latitude and longitude are required!" });
+        }
+
         const newGeoNote = await db
           .insert(geoNotes)
           .values({
@@ -318,7 +321,9 @@ export default async function (fastify: TypedFastifyInstance) {
             geoNote,
             latitude,
             longitude,
-            userId: permissionResult ? permissionResult.session?.user.id : null,
+            userId: permissionResult
+              ? permissionResult?.session?.user.id
+              : null,
             videoUrl,
           })
           .returning();
@@ -337,6 +342,7 @@ export default async function (fastify: TypedFastifyInstance) {
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().delete(
     "",
     {
+      preHandler: requirePermission("geo-notes:delete"),
       schema: {
         body: z.object({
           data: z.array(
@@ -392,20 +398,7 @@ export default async function (fastify: TypedFastifyInstance) {
         }),
       },
     },
-    async ({ body, headers }, reply) => {
-      const permissionResult = await accessPermissionCheck(
-        headers,
-        "geo-notes:delete",
-      );
-      if (!permissionResult.currentUser || !permissionResult.session) {
-        return reply.status(permissionResult.statusCode).send({
-          error: permissionResult.error,
-          ...(permissionResult.message
-            ? { message: permissionResult.message }
-            : {}),
-        });
-      }
-
+    async ({ currentUser, body, session }, reply) => {
       try {
         const { data } = body;
 
@@ -419,12 +412,9 @@ export default async function (fastify: TypedFastifyInstance) {
           const { id } = item;
 
           const whereConditions =
-            permissionResult.currentUser.role === "Admin"
+            currentUser.role === "Admin"
               ? eq(geoNotes.id, id)
-              : and(
-                  eq(geoNotes.id, id),
-                  eq(geoNotes.userId, permissionResult.session.user.id),
-                );
+              : and(eq(geoNotes.id, id), eq(geoNotes.userId, session.user.id));
 
           const existinggeoNotes = await db
             .select()
@@ -532,6 +522,7 @@ export default async function (fastify: TypedFastifyInstance) {
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().put(
     "/update",
     {
+      preHandler: requirePermission("geo-notes:update"),
       schema: {
         body: z.object({
           data: z.array(
@@ -614,20 +605,7 @@ export default async function (fastify: TypedFastifyInstance) {
         }),
       },
     },
-    async ({ body, headers }, reply) => {
-      const permissionResult = await accessPermissionCheck(
-        headers,
-        "geo-notes:update",
-      );
-      if (!permissionResult.currentUser || !permissionResult.session) {
-        return reply.status(permissionResult.statusCode).send({
-          error: permissionResult.error,
-          ...(permissionResult.message
-            ? { message: permissionResult.message }
-            : {}),
-        });
-      }
-
+    async ({ currentUser, body, session }, reply) => {
       try {
         const { data } = body;
 
@@ -641,12 +619,9 @@ export default async function (fastify: TypedFastifyInstance) {
           const { id, title, geoNote, videoUrl } = item;
 
           const whereConditions =
-            permissionResult.currentUser.role === "Admin"
+            currentUser.role === "Admin"
               ? eq(geoNotes.id, id)
-              : and(
-                  eq(geoNotes.id, id),
-                  eq(geoNotes.userId, permissionResult.session.user.id),
-                );
+              : and(eq(geoNotes.id, id), eq(geoNotes.userId, session.user.id));
 
           const existingGeoNotes = await db
             .select()

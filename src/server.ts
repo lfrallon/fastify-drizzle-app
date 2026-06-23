@@ -24,7 +24,7 @@ import { accessPermissionCheck } from "./utils/rbac.ts";
 
 // types
 import type { FastifyZodOpenApiTypeProvider } from "fastify-zod-openapi";
-import type { TypedFastifyInstance } from "./types/index.ts";
+import type { TypedFastifyInstance } from "./types/fastify.js";
 
 // Helper to get __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);

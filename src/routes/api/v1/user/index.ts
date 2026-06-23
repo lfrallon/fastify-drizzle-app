@@ -14,10 +14,12 @@ import { account, user } from "#/drizzle/schema/index.ts";
 import { accessPermissionCheck } from "#/utils/rbac.ts";
 import { argon2Options } from "#/lib/auth.ts";
 
+// middleware
+import { requirePermission } from "#/middleware/requirePermission.ts";
+
 // types
-import type { FastifyRequest, FastifyReply } from "fastify";
 import type { FastifyZodOpenApiTypeProvider } from "fastify-zod-openapi";
-import type { TypedFastifyInstance } from "#/types/index.ts";
+import type { TypedFastifyInstance } from "#/types/fastify.js";
 
 const AccessResponseSchema = {
   200: z.object({
@@ -50,35 +52,25 @@ const UPLOADS_DIR = "/app/src/public/uploads";
 
 export default async function (fastify: TypedFastifyInstance) {
   // GET /api/v1/user
-  fastify
-    .withTypeProvider<FastifyZodOpenApiTypeProvider>()
-    .get("", async function ({ headers }, reply) {
-      const permissionResult = await accessPermissionCheck(
-        headers,
-        "user:read",
-      );
-      if (!permissionResult.currentUser || !permissionResult.session) {
-        const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
-
-        return reply.status(statusCode).send({
-          error: permissionResult.error,
-          ...(permissionResult.message
-            ? { message: permissionResult.message }
-            : {}),
-        });
-      }
-
+  fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().get(
+    "",
+    {
+      preHandler: requirePermission("user:read"),
+    },
+    async function ({ session }, reply) {
       try {
-        return reply.send(permissionResult.session.user);
+        return reply.send(session.user);
       } catch (error) {
         return reply.code(500).send({ error: "Internal Server Error" });
       }
-    });
+    },
+  );
 
   // POST /api/v1/user/create
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().post(
     "/create",
     {
+      preHandler: requirePermission("user:create"),
       schema: {
         body: z.object({
           firstName: z.string().min(2, "First name is required"),
@@ -102,23 +94,9 @@ export default async function (fastify: TypedFastifyInstance) {
         }),
       },
     },
-    async (request, reply) => {
-      const permissionResult = await accessPermissionCheck(
-        request.headers,
-        "user:create",
-      );
-      if (!permissionResult.currentUser || !permissionResult.session) {
-        return reply.status(permissionResult.statusCode).send({
-          error: permissionResult.error,
-          ...(permissionResult.message
-            ? { message: permissionResult.message }
-            : {}),
-        });
-      }
-
+    async ({ body, session }, reply) => {
       try {
-        const { email, firstName, lastName, roleId, password, image } =
-          request.body;
+        const { email, firstName, lastName, roleId, password, image } = body;
 
         let imageString = null;
 
@@ -220,7 +198,7 @@ export default async function (fastify: TypedFastifyInstance) {
         });
 
         await fastify.cache.delByPrefix(
-          `user:accounts|userId:${permissionResult.session.user.id}|`,
+          `user:accounts|userId:${session.user.id}|`,
         );
 
         return reply.code(201).send({
@@ -237,6 +215,7 @@ export default async function (fastify: TypedFastifyInstance) {
   fastify.withTypeProvider<FastifyZodOpenApiTypeProvider>().patch(
     "/update",
     {
+      preHandler: requirePermission("user:update"),
       schema: {
         body: z.object({
           userId: z.string().min(2, "User id is required."),
@@ -313,22 +292,7 @@ export default async function (fastify: TypedFastifyInstance) {
         },
       },
     },
-    async ({ body, headers }, reply) => {
-      const permissionResult = await accessPermissionCheck(
-        headers,
-        "user:update",
-      );
-      if (!permissionResult.currentUser || !permissionResult.session) {
-        const statusCode = permissionResult.statusCode === 403 ? 403 : 401;
-
-        return reply.status(statusCode).send({
-          error: permissionResult.error,
-          ...(permissionResult.message
-            ? { message: permissionResult.message }
-            : {}),
-        });
-      }
-
+    async ({ body, session }, reply) => {
       try {
         const { userId, image, password, ...payload } = body;
         const updatedFields = { ...payload };
@@ -422,7 +386,7 @@ export default async function (fastify: TypedFastifyInstance) {
         });
 
         await fastify.cache.delByPrefix(
-          `user:accounts|userId:${permissionResult.session.user.id}|`,
+          `user:accounts|userId:${session.user.id}|`,
         );
 
         return reply.code(200).send(updatedUser);
@@ -440,20 +404,21 @@ export default async function (fastify: TypedFastifyInstance) {
         response: AccessResponseSchema,
       },
     },
-    async function (request: FastifyRequest, reply: FastifyReply) {
-      const permissionResult = await accessPermissionCheck(
-        request.headers,
-        "user:read",
-      );
-      if (!permissionResult.currentUser || !permissionResult.session) {
-        return reply.status(200).send({
-          id: null,
-          role: null,
-          permissions: [],
-        });
-      }
-
+    async function ({ headers }, reply) {
       try {
+        const permissionResult = await accessPermissionCheck(
+          headers,
+          "user:read",
+        );
+
+        if (!permissionResult.currentUser || !permissionResult.session) {
+          return reply.status(200).send({
+            id: null,
+            role: null,
+            permissions: [],
+          });
+        }
+
         return reply.code(200).send({
           id: permissionResult.session.user.roleId,
           role: permissionResult.currentUser.role,
