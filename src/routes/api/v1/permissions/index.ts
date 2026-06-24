@@ -11,8 +11,8 @@ import { account, permissions } from "#/drizzle/schema/index.ts";
 import { argon2Options } from "#/lib/auth.ts";
 import { buildUserPermissionsCacheKey } from "#/lib/permissions/index.ts";
 
-// middleware
-import { requirePermission } from "#/middleware/requirePermission.ts";
+// hooks
+import { requirePermission } from "#/hooks/index.ts";
 
 // types
 import type { TypedFastifyInstance } from "#/types/fastify.js";

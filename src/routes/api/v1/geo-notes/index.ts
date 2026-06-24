@@ -12,8 +12,8 @@ import { accessPermissionCheck } from "#/utils/rbac.ts";
 import { db } from "#/db/index.ts";
 import { geoNotes } from "#/drizzle/schema/schema.ts";
 
-// middleware
-import { requirePermission } from "#/middleware/requirePermission.ts";
+// hooks
+import { requirePermission } from "#/hooks/index.ts";
 
 // types
 import type { TypedFastifyInstance } from "#/types/fastify.js";

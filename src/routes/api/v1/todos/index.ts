@@ -8,8 +8,8 @@ import { todos } from "#/drizzle/schema/schema.ts";
 // libs
 import { buildTodosCacheKey } from "#/lib/todos/index.ts";
 
-// middleware
-import { requirePermission } from "#/middleware/requirePermission.ts";
+// hooks
+import { requirePermission } from "#/hooks/index.ts";
 
 // types
 import type { FastifyZodOpenApiTypeProvider } from "fastify-zod-openapi";

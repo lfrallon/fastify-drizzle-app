@@ -14,8 +14,8 @@ import { account, user } from "#/drizzle/schema/index.ts";
 import { accessPermissionCheck } from "#/utils/rbac.ts";
 import { argon2Options } from "#/lib/auth.ts";
 
-// middleware
-import { requirePermission } from "#/middleware/requirePermission.ts";
+// hooks
+import { requirePermission } from "#/hooks/index.ts";
 
 // types
 import type { FastifyZodOpenApiTypeProvider } from "fastify-zod-openapi";

@@ -23,7 +23,14 @@ const auth = betterAuth({
     provider: "pg", // or "pg" or "mysql"
     schema,
   }),
-  plugins: [anonymous()],
+  plugins: [
+    anonymous({
+      generateRandomEmail: () => {
+        const id = crypto.randomUUID();
+        return `guest-${id}@atlasnotes.com`;
+      },
+    }),
+  ],
   databaseHooks: {
     user: {
       create: {
