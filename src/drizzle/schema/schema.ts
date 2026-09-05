@@ -17,25 +17,24 @@ import {
 export const account = pgTable(
   "account",
   {
-    id: text().primaryKey().notNull(),
-    scope: text(),
-    password: text().notNull(),
+    id: text("id").primaryKey(),
+    issuer: text("issuer").notNull(),
     accountId: text("account_id").notNull(),
     providerId: text("provider_id").notNull(),
-    userId: text("user_id").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
     accessToken: text("access_token"),
     refreshToken: text("refresh_token"),
     idToken: text("id_token"),
-    accessTokenExpiresAt: timestamp("access_token_expires_at", {
-      mode: "string",
-    }),
-    refreshTokenExpiresAt: timestamp("refresh_token_expires_at", {
-      mode: "string",
-    }),
-    createdAt: timestamp("created_at", { mode: "string" })
-      .defaultNow()
+    accessTokenExpiresAt: timestamp("access_token_expires_at"),
+    refreshTokenExpiresAt: timestamp("refresh_token_expires_at"),
+    scope: text("scope"),
+    password: text("password"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
-    updatedAt: timestamp("updated_at", { mode: "string" }).notNull(),
   },
   (table) => [
     index("account_userId_idx").using(
@@ -65,11 +64,10 @@ export const user = pgTable(
     image: text("image"),
     emailVerified: boolean("email_verified").default(false).notNull(),
     isAnonymous: boolean("is_anonymous").default(false),
-    createdAt: timestamp("created_at", { mode: "string" })
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
       .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { mode: "string" })
-      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
   },
   (table) => [unique("user_email_unique").on(table.email)],
@@ -78,15 +76,14 @@ export const user = pgTable(
 export const verification = pgTable(
   "verification",
   {
-    id: text().primaryKey().notNull(),
-    identifier: text().notNull(),
-    value: text().notNull(),
-    expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
-    createdAt: timestamp("created_at", { mode: "string" })
+    id: text("id").primaryKey(),
+    identifier: text("identifier").notNull(),
+    value: text("value").notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
       .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { mode: "string" })
-      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
   },
   (table) => [
@@ -103,10 +100,10 @@ export const session = pgTable(
     id: text().primaryKey().notNull(),
     token: text().notNull(),
     expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
-    createdAt: timestamp("created_at", { mode: "string" })
-      .defaultNow()
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
-    updatedAt: timestamp("updated_at", { mode: "string" }).notNull(),
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
     userId: text("user_id").notNull(),
