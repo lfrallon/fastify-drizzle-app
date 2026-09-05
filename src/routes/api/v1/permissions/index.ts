@@ -392,6 +392,10 @@ export default async function (fastify: TypedFastifyInstance) {
           return reply.status(404).send({ error: "User not found!" });
         }
 
+        if (currentAccount.password === null) {
+          return reply.status(401).send({ error: "Invalid password" });
+        }
+
         const isValid = await verify(
           currentAccount.password,
           password,

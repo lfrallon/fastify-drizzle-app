@@ -26,8 +26,8 @@ type UserSelect = {
   email: string;
   image: string | null;
   emailVerified: boolean;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: Date;
+  updatedAt: Date;
   roleId: string | null;
 };
 
@@ -99,7 +99,7 @@ export default async function (fastify: TypedFastifyInstance) {
           updatedAt && id
             ? {
                 id,
-                updatedAt,
+                updatedAt: new Date(updatedAt),
               }
             : undefined;
         const queryLimit = clampedPageSize + 1;
@@ -340,6 +340,10 @@ export default async function (fastify: TypedFastifyInstance) {
 
         if (!currentAccount) {
           return reply.status(404).send({ error: "User not found!" });
+        }
+
+        if (currentAccount.password === null) {
+          return reply.status(401).send({ error: "Invalid password" });
         }
 
         const isValid = await verify(

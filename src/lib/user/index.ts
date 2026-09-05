@@ -4,7 +4,7 @@ export function buildUserAccountsCacheKey(params: {
   clampedPageSize: number;
   cursor?: {
     id: string;
-    updatedAt: string;
+    updatedAt: Date;
   };
 }) {
   const { userId, orderBy, clampedPageSize, cursor } = params;

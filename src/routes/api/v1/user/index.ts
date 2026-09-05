@@ -179,19 +179,20 @@ export default async function (fastify: TypedFastifyInstance) {
               email: email.toLowerCase(),
               emailVerified: false,
               image: imageString,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
+              createdAt: new Date(),
+              updatedAt: new Date(),
             })
             .returning();
 
           await tx.insert(account).values({
             id: v4(),
             userId: insertedUser.id,
-            accountId: email.toLowerCase(),
+            accountId: insertedUser.id,
             providerId: "credential",
             password: passwordHash,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            issuer: "local:credential",
           });
 
           return insertedUser;
@@ -259,11 +260,11 @@ export default async function (fastify: TypedFastifyInstance) {
             email: z.email(),
             image: z.string().nullable(),
             emailVerified: z.boolean(),
-            createdAt: z.string().meta({
+            createdAt: z.date().meta({
               description: "User creation date",
               example: "2024-01-01T00:00:00.000Z",
             }),
-            updatedAt: z.string().meta({
+            updatedAt: z.date().meta({
               description: "User last update date",
               example: "2024-01-01T00:00:00.000Z",
             }),
@@ -367,7 +368,7 @@ export default async function (fastify: TypedFastifyInstance) {
                   ? { image: null }
                   : {}),
               ...updatedFields,
-              updatedAt: new Date().toISOString(),
+              updatedAt: new Date(),
             })
             .where(eq(user.id, userId))
             .returning();
@@ -377,7 +378,7 @@ export default async function (fastify: TypedFastifyInstance) {
               .update(account)
               .set({
                 password: newPassword,
-                updatedAt: new Date().toISOString(),
+                updatedAt: new Date(),
               })
               .where(eq(account.userId, userId));
           }
