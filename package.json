@@ -28,11 +28,11 @@
     "@fastify/static": "^9.3.0",
     "@fastify/swagger": "^9.8.1",
     "@fastify/swagger-ui": "^5.2.6",
-    "@node-rs/argon2": "^2.2.0",
-    "better-auth": "^1.7.2",
+    "@node-rs/argon2": "^2.2.1",
+    "better-auth": "^1.7.4",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
-    "fastify": "^5.12.1",
+    "fastify": "^5.12.3",
     "fastify-plugin": "^5.1.0",
     "fastify-zod-openapi": "^5.7.0",
     "file-type": "^22.0.2",
@@ -41,10 +41,10 @@
     "qs": "^6.16.0",
     "tsdown": "^0.21.10",
     "uuid": "^14.0.2",
-    "zod": "^4.5.4"
+    "zod": "^4.6.2"
   },
   "devDependencies": {
-    "@types/node": "^25.9.5",
+    "@types/node": "^25.9.6",
     "@types/pg": "^8.23.1",
     "@types/qs": "^6.15.1",
     "cross-env": "^10.1.0",
