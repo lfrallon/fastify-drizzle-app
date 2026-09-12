@@ -182,6 +182,32 @@ export const createServer = async () => {
         description: "Testing the Fastify API's",
         version: "0.0.2",
       },
+      tags: [
+        {
+          name: "Accounts",
+          description: "User account management endpoints",
+        },
+        {
+          name: "Geo Notes",
+          description: "Geographic notes endpoints",
+        },
+        {
+          name: "Permissions",
+          description: "Permission management endpoints",
+        },
+        {
+          name: "Roles",
+          description: "Role management endpoints",
+        },
+        {
+          name: "Todos",
+          description: "Todo management endpoints",
+        },
+        {
+          name: "User",
+          description: "Current user and user management endpoints",
+        },
+      ],
       servers: [
         {
           url: "http://localhost:3006",
@@ -229,6 +255,31 @@ export const createServer = async () => {
       return swaggerObject;
     },
     transformSpecificationClone: true,
+  });
+
+  fastify.addHook("onRoute", (routeOptions) => {
+    const apiResource = routeOptions.url.match(/^\/api\/v1\/([^/]+)/)?.[1];
+    const tag = apiResource
+      ? apiResource
+          .split("-")
+          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+          .join(" ")
+      : routeOptions.url.startsWith("/api/auth/") ||
+          routeOptions.url === "/api/auth/*"
+        ? "Auth"
+        : undefined;
+
+    if (!tag) return;
+
+    routeOptions.schema ??= {};
+    routeOptions.schema.tags = [
+      ...new Set([
+        ...(routeOptions.schema.tags ?? []).filter(
+          (existingTag) => existingTag !== "default",
+        ),
+        tag,
+      ]),
+    ];
   });
 
   // Plugins
